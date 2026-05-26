@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard">
+  <div class="dashboard page">
     <!-- Urgent banner -->
     <div v-if="!loading && urgent.length" class="urgent-banner urgent-bg">
       <el-icon class="ub-icon"><Warning /></el-icon>
@@ -108,13 +108,11 @@
                 class="count-tag"
               >{{ openTasks.length }} 项</el-tag>
             </div>
-            <el-radio-group
+            <SegmentedControl
               v-model="todoFilter"
-              size="small"
-            >
-              <el-radio-button label="open">未完成</el-radio-button>
-              <el-radio-button label="all">全部</el-radio-button>
-            </el-radio-group>
+              size="sm"
+              :options="todoFilterOptions"
+            />
           </div>
 
           <template v-if="loading">
@@ -199,7 +197,7 @@
             </div>
             <div
               v-if="g.urgent_count > 0"
-              class="urgent-badge"
+              class="badge badge--danger badge--pill"
               :title="`${g.urgent_count} 个紧急任务`"
             >
               <el-icon><Warning /></el-icon> {{ g.urgent_count }}
@@ -245,8 +243,14 @@ import {
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { Api, type DashTask, type LeaderGroup, type AdviceResponse } from '@/api'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
 
 const router = useRouter()
+
+const todoFilterOptions = [
+  { label: '未完成', value: 'open' as const },
+  { label: '全部', value: 'all' as const },
+]
 
 // ---------- state ----------
 const loading = ref(true)
@@ -423,209 +427,247 @@ function ringLen(progress: number) {
 </script>
 
 <style lang="scss" scoped>
-.dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 1280px;
-  margin: 0 auto;
-  width: 100%;
-}
+/* Dashboard uses .page (global) for layout; only inner styles below */
 
-/* urgent banner */
+/* ============================================================
+   1. Urgent banner — flat alert strip
+   ============================================================ */
 .urgent-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
   border-radius: var(--radius-md);
+  border: 1px solid rgba(239, 68, 68, 0.25);
 
-  .ub-icon { font-size: 20px; }
+  .ub-icon { font-size: 20px; flex-shrink: 0; }
+
   .ub-text {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    .ub-list { font-size: 13px; opacity: 0.9; }
+    gap: var(--space-1);
+
+    .ub-list { font-size: var(--fs-sm); opacity: 0.9; }
   }
 }
 
-/* AI advice */
+/* ============================================================
+   2. AI advice — gradient hero card
+   ============================================================ */
 .advice-card {
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  color: #fff;
-  box-shadow: var(--shadow-card);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-md);
 
   .advice-bg {
-    position: absolute; inset: 0;
-    background: linear-gradient(135deg, #3D7EFF 0%, #6F4DFF 60%, #9B5BFF 100%);
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #2563EB 0%, #4F46E5 55%, #7C3AED 100%);
     z-index: 0;
   }
+
   .advice-bg::after {
     content: '';
     position: absolute;
-    width: 240px; height: 240px;
-    right: -60px; top: -80px;
-    background: rgba(255, 255, 255, 0.12);
+    width: 320px;
+    height: 320px;
+    right: -80px;
+    top: -100px;
+    background: rgba(255, 255, 255, 0.08);
     border-radius: 50%;
   }
+
   .advice-inner {
     position: relative;
     z-index: 1;
-    padding: 20px 22px;
+    padding: var(--space-6);          /* uniform 24px */
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
   }
 }
+
 .advice-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
 }
+
 .advice-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
+  gap: var(--space-2);
+  font-size: var(--fs-lg);
   font-weight: 600;
+
   .sparkle {
-    background: rgba(255, 255, 255, 0.22);
-    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.20);
+    border-radius: var(--radius-sm);
     padding: 6px;
+    display: inline-flex;
   }
+
   .cached-tag {
-    margin-left: 4px;
-    background: rgba(255,255,255,0.18);
-    border-color: rgba(255,255,255,0.32);
-    color: #fff;
+    margin-left: var(--space-1);
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.28);
+    color: var(--text-inverse);
   }
 }
+
 .refresh-btn {
-  color: #fff !important;
+  color: var(--text-inverse) !important;
   background: rgba(255, 255, 255, 0.14);
-  &:hover { background: rgba(255, 255, 255, 0.24); }
+  border-radius: var(--radius-sm);
+  &:hover { background: rgba(255, 255, 255, 0.22); }
 }
+
 .advice-text {
-  font-size: 17px;
-  line-height: 1.55;
-  margin: 0 0 12px 0;
+  font-size: var(--fs-lg);
+  line-height: 1.6;
+  margin: 0;
   font-weight: 500;
 }
+
 .advice-list {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
+
   li {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--space-2);
+    font-size: var(--fs-base);
     line-height: 1.5;
-    opacity: 0.95;
+    opacity: 0.93;
+
     .bullet {
-      background: rgba(255,255,255,0.22);
+      background: rgba(255, 255, 255, 0.20);
       border-radius: 50%;
       padding: 3px;
-      font-size: 12px;
+      font-size: var(--fs-xs);
       margin-top: 3px;
       flex-shrink: 0;
     }
   }
 }
+
 .advice-foot {
-  margin-top: 12px;
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: var(--fs-sm);
+  opacity: 0.68;
 }
 
-/* main grid */
+/* ============================================================
+   3. Main grid (calendar + todos)
+   ============================================================ */
 .main-grid {
   display: grid;
   grid-template-columns: 280px 1fr;
-  gap: 16px;
+  gap: var(--space-6);
   align-items: start;
 }
-.calendar-col {
-  position: sticky;
-  top: 0;
-}
+
+.calendar-col { position: sticky; top: 0; }
+
+/* Card head — uniform 16px bottom gap */
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-4);
 }
+
 .card-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 15px;
+  gap: var(--space-2);
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
-  .count-tag { margin-left: 6px; }
+
+  .count-tag { margin-left: var(--space-2); }
 }
 
-/* calendar */
+/* ============================================================
+   4. Mini calendar
+   ============================================================ */
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--space-1);                /* 4px between day cells */
+  margin-bottom: var(--space-4);
 }
+
 .cal-day {
   position: relative;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-soft);
-  padding: 6px 4px 8px;
+  padding: var(--space-1) 2px var(--space-2);
   text-align: center;
   cursor: default;
-  transition: background .15s, transform .15s;
+  transition: background 120ms ease, transform 120ms ease;
 
-  .cal-wd { font-size: 11px; color: var(--text-tertiary); }
-  .cal-num { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+  .cal-wd  { font-size: var(--fs-xs); color: var(--text-tertiary); }
+  .cal-num { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); }
+
   .cal-badge {
     position: absolute;
-    top: 2px; right: 2px;
+    top: 2px;
+    right: 2px;
     background: var(--color-primary);
-    color: #fff;
-    border-radius: 999px;
-    font-size: 10px;
-    min-width: 16px;
-    height: 16px;
-    line-height: 16px;
-    padding: 0 4px;
+    color: var(--text-inverse);
+    border-radius: var(--radius-full);
+    font-size: 9px;
+    min-width: 15px;
+    height: 15px;
+    line-height: 15px;
+    padding: 0 3px;
   }
-  &.has { cursor: pointer; }
-  &.has:hover {
-    background: var(--bg-card);
-    transform: translateY(-1px);
+
+  &.has {
+    cursor: pointer;
+    &:hover {
+      background: var(--bg-card);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
   }
+
   &.today {
-    background: rgba(61,126,255,0.1);
+    background: var(--color-primary-light);
     border-color: var(--color-primary);
     .cal-num { color: var(--color-primary); }
   }
 }
+
 .cal-legend {
   display: flex;
-  gap: 12px;
+  gap: var(--space-4);
+
   .dot {
     display: inline-block;
-    width: 8px; height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    margin-right: 4px;
+    margin-right: var(--space-1);
     vertical-align: middle;
   }
+
   .dot-today { background: var(--color-primary); }
-  .dot-has   { background: var(--color-accent); }
+  .dot-has   { background: var(--color-warning); }
 }
 
-/* todos */
+/* ============================================================
+   5. Todo list — rows separated by hairline
+   ============================================================ */
 .todo-list {
   list-style: none;
   padding: 0;
@@ -633,151 +675,167 @@ function ringLen(progress: number) {
   display: flex;
   flex-direction: column;
 }
+
 .todo-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 4px;
-  border-bottom: 1px solid var(--border-color);
-  &:last-child { border-bottom: none; }
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 120ms ease;
 
-  &.urgent { background: linear-gradient(90deg, rgba(245,108,108,0.06), transparent 60%); }
+  &:first-child { padding-top: 0; }
+  &:last-child  { padding-bottom: 0; border-bottom: none; }
+
+  &.urgent { background: linear-gradient(90deg, rgba(239, 68, 68, 0.05), transparent 70%); }
   &.done .todo-title { color: var(--text-tertiary); text-decoration: line-through; }
 }
+
 .todo-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
+
 .todo-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
+
 .course-chip {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-weight: 600;
   white-space: nowrap;
 }
-.group-name { font-size: 12px; }
+
+.group-name { font-size: var(--fs-sm); }
+
 .todo-title {
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 500;
   color: var(--text-primary);
-  margin-bottom: 4px;
   word-break: break-word;
+  line-height: 1.4;
 }
+
 .todo-sub {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 
   .ddl {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: var(--space-1);
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
-    .el-icon { font-size: 12px; }
+
+    .el-icon { font-size: var(--fs-sm); }
     &.is-urgent  { color: var(--color-warning); font-weight: 600; }
     &.is-overdue { color: var(--color-danger);  font-weight: 600; }
   }
 }
-.status-pill {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 999px;
-}
+
 .todo-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
 }
 
-/* leader cards */
+/* ============================================================
+   6. Leader groups — card grid, identical to Groups page
+   ============================================================ */
 .leader-row {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-4);
 }
+
 .section-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: var(--space-4);
 }
+
 .leader-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-6);                /* matches global card-grid */
 }
+
 .leader-card {
   cursor: pointer;
-  transition: transform .15s, box-shadow .15s;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
   }
 }
+
 .leader-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
+
 .leader-titles {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 
   .course-chip { align-self: flex-start; }
+
   .leader-name {
-    font-size: 15px;
+    font-size: var(--fs-md);
     font-weight: 600;
     color: var(--text-primary);
     word-break: break-word;
+    line-height: 1.35;
   }
 }
-.urgent-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(245,108,108,0.14);
-  color: var(--color-danger);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
+
+/* Urgent count badge uses global .badge .badge--danger .badge--pill */
+
 .leader-body {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
+
 .ring-wrap { width: 72px; height: 72px; flex-shrink: 0; }
+
 .ring {
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100%;
   transform: rotate(-90deg);
+
   .ring-track {
     fill: none;
     stroke: var(--border-color);
-    stroke-width: 6;
+    stroke-width: 5;
   }
+
   .ring-fill {
     fill: none;
     stroke: var(--color-primary);
-    stroke-width: 6;
+    stroke-width: 5;
     stroke-linecap: round;
-    transition: stroke-dasharray .4s ease;
+    transition: stroke-dasharray 400ms ease;
   }
+
   .ring-text {
     transform: rotate(90deg);
     transform-origin: 32px 32px;
@@ -786,6 +844,7 @@ function ringLen(progress: number) {
     fill: var(--text-primary);
   }
 }
+
 .counts {
   flex: 1;
   list-style: none;
@@ -793,30 +852,28 @@ function ringLen(progress: number) {
   margin: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
+  gap: var(--space-2) var(--space-4);
 
   li {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 13px;
+    font-size: var(--fs-sm);
+
     b { font-weight: 600; color: var(--text-primary); }
   }
 }
 
-/* responsive */
+/* ============================================================
+   Responsive
+   ============================================================ */
 @media (max-width: 768px) {
-  .main-grid {
-    grid-template-columns: 1fr;
-  }
+  .main-grid { grid-template-columns: 1fr; }
   .calendar-col { position: static; }
-  .advice-text { font-size: 15px; }
+  .advice-text  { font-size: var(--fs-md); }
   .advice-card .advice-bg::after { display: none; }
-  .leader-body { gap: 12px; }
-  .ring-wrap { width: 60px; height: 60px; }
-  .todo-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
+  .leader-body  { gap: var(--space-3); }
+  .ring-wrap    { width: 60px; height: 60px; }
+  .todo-actions { flex-direction: column; align-items: stretch; }
 }
 </style>

@@ -1,0 +1,37 @@
+# Development override — enables Vite HMR for the frontend.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#   or:
+#   make dev
+#
+# Access the app at http://localhost:5173  (Vite dev server, HMR enabled)
+# The backend API and WebSocket are still served through Docker services.
+
+services:
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      # Mount source so edits are reflected immediately
+      - ./frontend:/app
+      # Keep the container's node_modules isolated (don't overwrite with host's)
+      - /app/node_modules
+    environment:
+      # Force polling for file watching — required under WSL2 / Docker volume mounts
+      # where inotify events are not reliably delivered.
+      CHOKIDAR_USEPOLLING: "true"
+      # Proxy targets: point to Docker service names instead of localhost
+      VITE_DEV_API_TARGET: "http://api:8000"
+      VITE_DEV_WS_TARGET: "ws://api:8000"
+    ports:
+      # Expose Vite dev server directly — access at http://localhost:5173
+      - "5173:5173"
+    # No restart policy for dev containers
+    restart: "no"
+
+  nginx:
+    volumes:
+      # Use a dev-specific Nginx config that proxies to the Vite dev server
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro

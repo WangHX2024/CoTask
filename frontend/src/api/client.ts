@@ -1,5 +1,4 @@
 import axios, { type AxiosError, type AxiosInstance } from 'axios'
-import { ElMessage } from 'element-plus'
 
 declare const __VITE_API_BASE__: string
 
@@ -23,6 +22,8 @@ http.interceptors.response.use(
   (res) => res,
   async (error: AxiosError<any>) => {
     const original = error.config as any
+
+    // 401: attempt token refresh once, then redirect to login
     if (error.response?.status === 401 && !original?._retry) {
       original._retry = true
       try {
@@ -46,15 +47,8 @@ http.interceptors.response.use(
         return Promise.reject(error)
       }
     }
-    // Surface known business errors
-    const data = error.response?.data as any
-    if (data?.code && data?.message) {
-      ElMessage.error(`${data.message}`)
-    } else if (error.response?.status && error.response.status >= 500) {
-      ElMessage.error('服务异常，请稍后再试')
-    } else if (error.code === 'ECONNABORTED') {
-      ElMessage.error('请求超时')
-    }
+
+    // Propagate error — each caller shows its own contextual message
     return Promise.reject(error)
   },
 )

@@ -1,7 +1,11 @@
 <template>
-  <el-dropdown @command="onCmd">
-    <el-button text>
-      <el-icon><Sunny v-if="ui.theme === 'light'" /><Moon v-else-if="ui.theme === 'dark'" /><Monitor v-else /></el-icon>
+  <el-dropdown class="topbar-icon-trigger" @command="onCmd">
+    <el-button text class="topbar-icon-btn" aria-label="切换主题">
+      <el-icon :size="20">
+        <Sunny v-if="ui.theme === 'light'" />
+        <Moon v-else-if="ui.theme === 'dark'" />
+        <Monitor v-else />
+      </el-icon>
     </el-button>
     <template #dropdown>
       <el-dropdown-menu>

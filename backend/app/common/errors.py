@@ -1,6 +1,7 @@
 """Unified error handling."""
 from __future__ import annotations
 
+import json
 import logging
 import traceback
 
@@ -26,8 +27,8 @@ class AppError(Exception):
 
 # Common pre-baked errors
 class NotFound(AppError):
-    def __init__(self, what: str = "resource"):
-        super().__init__("NOT_FOUND", f"{what} not found", 404)
+    def __init__(self, what: str = "resource", message: str | None = None):
+        super().__init__("NOT_FOUND", message or f"{what} not found", 404)
 
 
 class Forbidden(AppError):
@@ -50,6 +51,35 @@ class BadRequest(AppError):
         super().__init__(code, msg, 400, detail)
 
 
+def _validation_detail(exc) -> dict | list | str:
+    """Extract JSON-safe marshmallow/webargs validation messages."""
+    inner = getattr(exc, "exc", None)
+    if inner is not None and hasattr(inner, "messages"):
+        raw = inner.messages
+    else:
+        data = getattr(exc, "data", None)
+        if isinstance(data, dict):
+            if "messages" in data:
+                raw = data["messages"]
+            elif "errors" in data and isinstance(data["errors"], dict):
+                raw = data["errors"]
+            else:
+                raw = {}
+        else:
+            raw = {}
+    try:
+        return json.loads(json.dumps(raw, default=str))
+    except (TypeError, ValueError):
+        return str(raw)
+
+
+def _validation_message(detail) -> str:
+    blob = json.dumps(detail, ensure_ascii=False, default=str) if detail else ""
+    if "skills" in blob:
+        return "技能标签格式不正确，请检查每项长度（1–32 字）且不要留空"
+    return "请求参数校验失败"
+
+
 def register_error_handlers(app: Flask):
     @app.errorhandler(AppError)
     def handle_app_error(e: AppError):
@@ -70,12 +100,11 @@ def register_error_handlers(app: Flask):
 
     @app.errorhandler(422)
     def handle_422(e):
-        # flask-smorest validation errors come through here
-        data = getattr(e, "data", {})
+        detail = _validation_detail(e)
         return jsonify({
             "code": "VALIDATION_ERROR",
-            "message": "请求参数校验失败",
-            "detail": data.get("errors", data),
+            "message": _validation_message(detail),
+            "detail": detail,
         }), 422
 
     @app.errorhandler(Exception)

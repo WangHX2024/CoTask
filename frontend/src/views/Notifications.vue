@@ -1,32 +1,32 @@
 <template>
-  <div class="notify-page">
-    <div class="page-head">
-      <div class="head-left">
-        <el-icon class="head-icon"><Bell /></el-icon>
-        <h2 class="head-title">消息中心</h2>
-        <el-tag v-if="notify.unread > 0" type="danger" effect="light" size="small">
-          {{ notify.unread }} 条未读
-        </el-tag>
+  <div class="notify-page page">
+    <div class="content-narrow flex-col gap-4">
+    <header class="page-header">
+      <div class="page-header-text">
+        <h1 class="page-title">消息中心</h1>
+        <p class="page-desc">
+          <span v-if="notify.unread > 0">{{ notify.unread }} 条未读消息</span>
+          <span v-else>所有消息均已读</span>
+        </p>
       </div>
-      <div class="head-right">
-        <el-button :disabled="!hasUnread" :loading="marking" @click="onMarkAll">
-          <el-icon><Check /></el-icon>&nbsp;全部标记为已读
-        </el-button>
-      </div>
-    </div>
+    </header>
 
-    <!-- Filter chips -->
-    <div class="filter-bar">
-      <div
-        v-for="f in filters"
-        :key="f.key"
-        class="chip"
-        :class="{ active: currentFilter === f.key }"
-        @click="currentFilter = f.key"
+    <div class="notify-toolbar">
+      <SegmentedControl
+        v-model="currentFilter"
+        size="md"
+        class="notify-filter"
+        :options="filterOptions"
+      />
+      <el-button
+        round
+        class="mark-all-btn"
+        :disabled="!hasUnread"
+        :loading="marking"
+        @click="onMarkAll"
       >
-        {{ f.label }}
-        <span v-if="f.badge != null" class="chip-badge">{{ f.badge }}</span>
-      </div>
+        <el-icon><Check /></el-icon>&nbsp;全部标记为已读
+      </el-button>
     </div>
 
     <el-card shadow="never" class="list-card" v-loading="loading">
@@ -77,6 +77,7 @@
         </el-button>
       </div>
     </el-card>
+    </div>
   </div>
 </template>
 
@@ -88,6 +89,7 @@ import { Bell, Check, ArrowRight } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useNotifyStore } from '@/stores/notifications'
 import type { NotificationItem } from '@/api'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
 
 const router = useRouter()
 const notify = useNotifyStore()
@@ -101,19 +103,15 @@ const pageSize = ref(30)
 // ---------- derived ----------
 const items = computed(() => notify.items)
 
-const filters = computed(() => [
-  { key: 'all' as const, label: '全部', badge: items.value.length || undefined },
-  {
-    key: 'unread' as const,
-    label: '未读',
-    badge: items.value.filter((n) => !n.read_at).length || undefined,
-  },
-  {
-    key: 'urgent' as const,
-    label: '紧急',
-    badge: items.value.filter(isUrgent).length || undefined,
-  },
-])
+const filterOptions = computed(() => {
+  const unreadCount = items.value.filter((n) => !n.read_at).length
+  const urgentCount = items.value.filter(isUrgent).length
+  return [
+    { value: 'all' as const, label: '全部', badge: items.value.length || undefined },
+    { value: 'unread' as const, label: '未读', badge: unreadCount || undefined },
+    { value: 'urgent' as const, label: '紧急', badge: urgentCount || undefined },
+  ]
+})
 
 const filteredItems = computed(() => {
   if (currentFilter.value === 'unread') {
@@ -129,8 +127,8 @@ const canLoadMore = computed(() => pageSize.value < filteredItems.value.length)
 const hasUnread = computed(() => items.value.some((n) => !n.read_at))
 
 const emptyText = computed(() => {
-  if (currentFilter.value === 'unread') return '没有未读消息'
-  if (currentFilter.value === 'urgent') return '没有紧急消息'
+  if (currentFilter.value === 'unread') return '暂无未读消息'
+  if (currentFilter.value === 'urgent') return '暂无紧急消息'
   return '暂无消息'
 })
 
@@ -267,119 +265,123 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.notify-page {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 920px;
-  margin: 0 auto;
-  width: 100%;
-}
+/* Layout from .page + .content-narrow (global) */
 
-.page-head {
+.notify-toolbar {
+  /* md SegmentedControl: 3px padding × 2 + 32px button = 38px */
+  --notify-bar-h: 38px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-4);
   flex-wrap: wrap;
-  .head-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+}
+
+.notify-filter {
+  width: fit-content;
+  max-width: 100%;
+  flex-shrink: 0;
+
+  :deep(.segmented-control.segmented-control--md) {
+    height: var(--notify-bar-h);
+    box-sizing: border-box;
   }
-  .head-icon {
-    font-size: 22px;
-    color: var(--color-primary);
-  }
-  .head-title {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
+
+  :deep(.segmented-control--md .segmented-control__btn) {
+    min-height: calc(var(--notify-bar-h) - 6px);
+    box-sizing: border-box;
   }
 }
 
-.filter-bar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.chip {
+.mark-all-btn {
+  flex-shrink: 0;
+  height: var(--notify-bar-h) !important;
+  min-height: var(--notify-bar-h) !important;
+  padding: 0 var(--space-4) !important;
+  font-size: var(--fs-base);
+  font-weight: 500;
+  line-height: 1;
+  border: 1px solid var(--border-color) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-secondary) !important;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  user-select: none;
-  &:hover {
-    color: var(--color-primary);
-    border-color: var(--color-primary);
+  justify-content: center;
+
+  &:not(:disabled):hover {
+    border-color: var(--text-tertiary) !important;
+    color: var(--text-primary) !important;
+    background: var(--bg-soft) !important;
   }
-  &.active {
-    background: rgba(61,126,255,.10);
-    color: var(--color-primary);
-    border-color: var(--color-primary);
-  }
-  .chip-badge {
-    background: var(--bg-soft);
-    color: var(--text-secondary);
-    border-radius: 999px;
-    padding: 0 6px;
-    font-size: 11px;
-    min-width: 18px;
-    text-align: center;
-  }
-  &.active .chip-badge {
-    background: var(--color-primary);
-    color: #fff;
+
+  &:disabled {
+    opacity: 0.45;
   }
 }
 
+/* ---------- List card (flush — rows manage their own padding) ---------- */
 .list-card {
   :deep(.el-card__body) { padding: 0; }
 }
 
+/* ---------- Empty state ---------- */
 .empty-state {
-  padding: 60px 16px;
+  padding: var(--space-10) var(--space-6);
   text-align: center;
   color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
+
   .el-icon { font-size: 32px; }
   p { margin: 0; }
 }
 
+/* ---------- Notification row — uniform list-row style ---------- */
 .notify-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: background .15s ease;
+  transition: background 120ms ease;
+  position: relative;
+
   &:last-child { border-bottom: none; }
   &:hover { background: var(--bg-soft); }
-  &.unread { background: rgba(61,126,255,.04); }
-  &.unread:hover { background: rgba(61,126,255,.08); }
+
+  &.unread {
+    background: var(--color-primary-lighter);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--color-primary);
+    }
+  }
+
+  &.unread:hover { background: var(--color-primary-light); }
   &.urgent .row-title { color: var(--color-danger); }
 }
 
 .row-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  .emoji { font-size: 20px; line-height: 1; }
+
+  .emoji { font-size: 18px; line-height: 1; }
 }
 
 .row-body {
@@ -387,50 +389,56 @@ onMounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
 }
+
 .row-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: var(--space-2);
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-primary);
+  line-height: 1.4;
 }
+
 .unread-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--color-danger);
+  width: 7px;
+  height: 7px;
+  background: var(--color-primary);
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
 }
+
 .row-sub {
-  font-size: 12px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .row-time {
-  font-size: 12px;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
 }
+
 .row-actions {
   flex-shrink: 0;
   display: flex;
   align-items: center;
 }
 
+/* Load more — sits inside the same card */
 .load-more {
   display: flex;
   justify-content: center;
-  padding: 12px 0;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
 }
 
 @media (max-width: 768px) {
-  .page-head { flex-direction: column; align-items: stretch; }
-  .head-right { display: flex; justify-content: flex-end; }
-  .row-actions {
-    align-self: flex-end;
-  }
+  .row-actions { align-self: flex-end; }
 }
 </style>

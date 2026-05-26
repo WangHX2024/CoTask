@@ -61,12 +61,30 @@ export interface PostBrief {
   likes: number; favs: number; comments: number; link_url?: string
   has_template: boolean; excerpt: string; created_at: string
   liked_by_me: boolean; favored_by_me: boolean
+  /** True when the current viewer is the post author (incl. anonymous posts) */
+  is_author?: boolean
 }
-export interface PostDetail extends PostBrief { body_md: string; template_root_id?: number }
+export interface PostDetail extends PostBrief {
+  body_md: string
+  template_root_id?: number
+  template_nodes?: TaskNode[]
+}
 export interface Comment {
   id: number; post_id: number; body: string; author_id: number
   author_name: string; author_avatar: string; anon: boolean
   parent_id?: number; created_at: string
+  /** Post comment total — present on create response */
+  comments?: number
+}
+export interface LikePostResponse {
+  liked: boolean
+  liked_by_me: boolean
+  likes: number
+}
+export interface FavPostResponse {
+  favored: boolean
+  favored_by_me: boolean
+  favs: number
 }
 export interface NotificationItem {
   id: number; type: string; payload: Record<string, unknown>
@@ -171,12 +189,16 @@ export const Api = {
   updatePost: (id: number, data: any) =>
     http.patch<PostDetail>(`/inspiration/posts/${id}`, data).then((r) => r.data),
   deletePost: (id: number) => http.delete(`/inspiration/posts/${id}`),
-  likePost: (id: number) => http.post(`/inspiration/posts/${id}/like`).then((r) => r.data),
-  favPost: (id: number) => http.post(`/inspiration/posts/${id}/favorite`).then((r) => r.data),
+  likePost: (id: number) =>
+    http.post<LikePostResponse>(`/inspiration/posts/${id}/like`).then((r) => r.data),
+  favPost: (id: number) =>
+    http.post<FavPostResponse>(`/inspiration/posts/${id}/favorite`).then((r) => r.data),
   comments: (id: number) =>
     http.get<Comment[]>(`/inspiration/posts/${id}/comments`).then((r) => r.data),
   addComment: (id: number, data: { body: string; parent_id?: number; anon?: boolean }) =>
     http.post<Comment>(`/inspiration/posts/${id}/comments`, data).then((r) => r.data),
+  templateNodes: (postId: number) =>
+    http.get<{ nodes: TaskNode[] }>(`/inspiration/posts/${postId}/template`).then((r) => r.data),
   importTemplate: (postId: number, to_group_id: number, mode = 'replace') =>
     http.post(`/inspiration/posts/${postId}/import`, { to_group_id, mode }).then((r) => r.data),
 

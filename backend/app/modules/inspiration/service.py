@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import and_, func, or_, select, text
 
 from ...common import audit
 from ...common.errors import BadRequest, Forbidden, NotFound
@@ -32,16 +32,19 @@ def _serialize(p: InspirationPost, viewer_id: int | None = None, with_body: bool
             select(PostFavorite).where(PostFavorite.post_id == p.id, PostFavorite.user_id == viewer_id)
         ).scalar_one_or_none() is not None
     excerpt = (p.body_md or "")[:140].replace("\n", " ")
+    viewer_is_author = viewer_id is not None and viewer_id == p.author_id
+    hide_author_identity = p.anon and not viewer_is_author
     base = {
         "id": p.id,
         "title": p.title,
         "cover_url": p.cover_url,
         "category": p.category,
         "course_tag": p.course_tag,
-        "author_id": p.author_id if not p.anon else 0,
+        "author_id": 0 if hide_author_identity else p.author_id,
         "author_name": "匿名同学" if p.anon else (author.name if author else "用户"),
-        "author_avatar": "" if p.anon else (author.avatar_url if author else ""),
+        "author_avatar": "" if hide_author_identity else (author.avatar_url if author else ""),
         "anon": p.anon,
+        "is_author": viewer_is_author,
         "likes": p.likes,
         "favs": p.favs,
         "comments": p.comments,
@@ -58,6 +61,40 @@ def _serialize(p: InspirationPost, viewer_id: int | None = None, with_body: bool
     return base
 
 
+def _post_search_filter(keyword: str):
+    """Match title, course name (course_tag), or author name (non-anon)."""
+    kw = keyword.strip()
+    if not kw:
+        return None
+    tag_kw = kw.lstrip("#").strip() or kw
+    like_kw = f"%{kw}%"
+    like_tag = f"%{tag_kw}%"
+
+    author_exists = (
+        select(1)
+        .select_from(User)
+        .where(
+            User.id == InspirationPost.author_id,
+            User.deleted_at.is_(None),
+            or_(
+                User.name.like(like_kw),
+                User.student_id.like(like_kw),
+            ),
+        )
+        .correlate(InspirationPost)
+        .exists()
+    )
+
+    clauses = [
+        InspirationPost.title.like(like_kw),
+        InspirationPost.course_tag.like(like_tag),
+        and_(InspirationPost.anon.is_(False), author_exists),
+    ]
+    if "匿名" in kw:
+        clauses.append(InspirationPost.anon.is_(True))
+    return or_(*clauses)
+
+
 def list_posts(viewer_id: int, query: dict):
     q = (
         select(InspirationPost)
@@ -68,13 +105,9 @@ def list_posts(viewer_id: int, query: dict):
     if query.get("course"):
         q = q.where(InspirationPost.course_tag == query["course"])
     if query.get("q"):
-        kw = query["q"].strip()
-        q = q.where(
-            or_(
-                InspirationPost.title.like(f"%{kw}%"),
-                InspirationPost.body_md.like(f"%{kw}%"),
-            )
-        )
+        search_clause = _post_search_filter(query["q"])
+        if search_clause is not None:
+            q = q.where(search_clause)
     if query.get("mine"):
         q = q.where(InspirationPost.author_id == viewer_id)
     if query.get("favorites"):
@@ -102,11 +135,81 @@ def list_posts(viewer_id: int, query: dict):
     }
 
 
+def _template_descendant_ids(root_id: int) -> list[int]:
+    """Collect all tasks under a template synthetic root (parent_id walk; closure fallback)."""
+    desc_ids = [
+        row[0]
+        for row in db.session.execute(
+            select(TaskClosure.descendant_id).where(
+                TaskClosure.ancestor_id == root_id,
+                TaskClosure.distance > 0,
+            )
+        ).all()
+    ]
+    if desc_ids:
+        return desc_ids
+
+    collected: list[int] = []
+    frontier = [
+        row[0]
+        for row in db.session.execute(
+            select(Task.id).where(
+                Task.parent_id == root_id,
+                Task.deleted_at.is_(None),
+            )
+        ).all()
+    ]
+    while frontier:
+        collected.extend(frontier)
+        frontier = [
+            row[0]
+            for row in db.session.execute(
+                select(Task.id).where(
+                    Task.parent_id.in_(frontier),
+                    Task.deleted_at.is_(None),
+                )
+            ).all()
+        ]
+    return collected
+
+
+def get_template_preview(post_id: int) -> dict:
+    """Return flat task nodes for a post's detached template subtree (excludes synthetic root)."""
+    from ..tree.service import _serialize_task
+
+    p = db.session.get(InspirationPost, post_id)
+    if not p or p.status == "removed":
+        raise NotFound("post")
+    if not p.template_root_id:
+        raise BadRequest("NOT_TEMPLATE", "该帖不是模板")
+
+    desc_ids = _template_descendant_ids(p.template_root_id)
+    if not desc_ids:
+        return {"nodes": []}
+
+    rows = db.session.execute(
+        select(Task)
+        .where(Task.id.in_(desc_ids), Task.deleted_at.is_(None))
+        .order_by(Task.path.asc(), Task.position.asc())
+    ).scalars().all()
+    assigns = db.session.execute(
+        select(TaskAssignment).where(TaskAssignment.task_id.in_(desc_ids))
+    ).scalars().all()
+    a_map: dict[int, list[int]] = {}
+    for a in assigns:
+        a_map.setdefault(a.task_id, []).append(a.user_id)
+    nodes = [_serialize_task(t, a_map.get(t.id, []), []) for t in rows]
+    return {"nodes": nodes}
+
+
 def get_post(viewer_id: int, post_id: int) -> dict:
     p = db.session.get(InspirationPost, post_id)
     if not p or p.status == "removed":
         raise NotFound("post")
-    return _serialize(p, viewer_id, with_body=True)
+    data = _serialize(p, viewer_id, with_body=True)
+    if data.get("has_template"):
+        data["template_nodes"] = get_template_preview(post_id)["nodes"]
+    return data
 
 
 def _clone_subtree_as_template(group_id: int, author_id: int) -> int | None:
@@ -226,7 +329,7 @@ def delete_post(actor_id: int, post_id: int):
         p.status = "removed"
 
 
-def toggle_like(uid: int, post_id: int) -> bool:
+def toggle_like(uid: int, post_id: int) -> dict:
     p = db.session.get(InspirationPost, post_id)
     if not p or p.status == "removed":
         raise NotFound("post")
@@ -237,13 +340,15 @@ def toggle_like(uid: int, post_id: int) -> bool:
         if existing:
             s.delete(existing)
             p.likes = max(0, p.likes - 1)
-            return False
-        s.add(PostLike(post_id=post_id, user_id=uid))
-        p.likes += 1
-    return True
+            liked = False
+        else:
+            s.add(PostLike(post_id=post_id, user_id=uid))
+            p.likes += 1
+            liked = True
+    return {"liked": liked, "liked_by_me": liked, "likes": p.likes}
 
 
-def toggle_favorite(uid: int, post_id: int) -> bool:
+def toggle_favorite(uid: int, post_id: int) -> dict:
     p = db.session.get(InspirationPost, post_id)
     if not p:
         raise NotFound("post")
@@ -254,10 +359,12 @@ def toggle_favorite(uid: int, post_id: int) -> bool:
         if existing:
             s.delete(existing)
             p.favs = max(0, p.favs - 1)
-            return False
-        s.add(PostFavorite(post_id=post_id, user_id=uid))
-        p.favs += 1
-    return True
+            favored = False
+        else:
+            s.add(PostFavorite(post_id=post_id, user_id=uid))
+            p.favs += 1
+            favored = True
+    return {"favored": favored, "favored_by_me": favored, "favs": p.favs}
 
 
 def add_comment(uid: int, post_id: int, data: dict) -> dict:
@@ -273,7 +380,9 @@ def add_comment(uid: int, post_id: int, data: dict) -> dict:
         s.add(c)
         p.comments += 1
         s.flush()
-    return _serialize_comment(c)
+    out = _serialize_comment(c)
+    out["comments"] = p.comments
+    return out
 
 
 def list_comments(post_id: int) -> list[dict]:

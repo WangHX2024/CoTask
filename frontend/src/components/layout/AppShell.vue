@@ -1,19 +1,39 @@
 <template>
   <div class="app-shell">
     <aside class="sidebar" :class="{ collapsed: ui.sidebarCollapsed }">
-      <div class="logo-row">
-        <div class="logo">
-          <span class="logo-mark">Co</span>
-          <span v-if="!ui.sidebarCollapsed" class="logo-text">Task</span>
+      <div class="logo-row" :class="{ 'logo-row--compact': ui.sidebarCollapsed }">
+        <div v-if="ui.sidebarCollapsed" class="logo-slot">
+          <div class="sidebar-brand">
+            <CoTaskLogo size="sm" variant="on-light" :show-wordmark="false" />
+          </div>
+          <el-button
+            text
+            class="collapse-btn collapse-btn--reveal"
+            aria-label="展开侧栏"
+            @click="ui.toggleSidebar"
+          >
+            <el-icon :size="16"><Expand /></el-icon>
+          </el-button>
         </div>
-        <el-button text @click="ui.toggleSidebar" class="collapse-btn">
-          <el-icon><Fold v-if="!ui.sidebarCollapsed" /><Expand v-else /></el-icon>
-        </el-button>
+        <template v-else>
+          <div class="sidebar-brand">
+            <CoTaskLogo size="sm" variant="on-light" :show-wordmark="true" />
+          </div>
+          <el-button
+            text
+            class="collapse-btn"
+            aria-label="收起侧栏"
+            @click="ui.toggleSidebar"
+          >
+            <el-icon><Fold /></el-icon>
+          </el-button>
+        </template>
       </div>
 
       <el-menu
         :default-active="active"
         :collapse="ui.sidebarCollapsed"
+        :collapse-transition="false"
         @select="onSelect"
         class="menu"
       >
@@ -48,7 +68,7 @@
           </template>
         </el-menu-item>
         <el-menu-item index="/groups">
-          <el-icon><UserFilled /></el-icon>
+          <el-icon><School /></el-icon>
           <template #title>我的小组</template>
         </el-menu-item>
       </el-menu>
@@ -60,22 +80,38 @@
           <el-select
             v-if="groups.list.length"
             :model-value="groups.currentId"
-            @change="onSwitchGroup"
+            class="group-select"
+            popper-class="group-select-popper"
             placeholder="选择小组"
-            size="default"
-            style="min-width: 240px"
+            @change="onSwitchGroup"
           >
+            <template #prefix>
+              <el-icon class="group-select-icon"><School /></el-icon>
+            </template>
+            <template v-if="currentGroup" #label>
+              <span class="group-select-value">
+                <span class="group-select-course">{{ currentGroup.course_name }}</span>
+                <span class="group-select-name">{{ currentGroup.name }}</span>
+                <span
+                  class="group-select-role"
+                  :class="currentGroup.role"
+                >{{ currentGroup.role === 'leader' ? '组长' : '组员' }}</span>
+              </span>
+            </template>
             <el-option
               v-for="g in groups.list"
               :key="g.id"
               :value="g.id"
-              :label="`[${g.course_name}] ${g.name}`"
+              :label="`${g.course_name} · ${g.name}`"
             >
               <div class="group-opt">
-                <span>{{ g.course_name }} · {{ g.name }}</span>
-                <el-tag size="small" :type="g.role === 'leader' ? 'warning' : 'info'">
+                <span class="group-opt-text">
+                  <span class="group-opt-course">{{ g.course_name }}</span>
+                  <span class="group-opt-name">{{ g.name }}</span>
+                </span>
+                <span class="group-opt-role" :class="g.role">
                   {{ g.role === 'leader' ? '组长' : '组员' }}
-                </el-tag>
+                </span>
               </div>
             </el-option>
           </el-select>
@@ -85,9 +121,19 @@
         </div>
 
         <div class="topbar-right">
-          <el-button text @click="router.push('/notifications')">
-            <el-badge :value="notify.unread || ''" :hidden="!notify.unread" :max="99">
-              <el-icon size="20"><Bell /></el-icon>
+          <el-button
+            text
+            class="topbar-icon-btn"
+            aria-label="消息通知"
+            @click="router.push('/notifications')"
+          >
+            <el-badge
+              :value="notify.unread || ''"
+              :hidden="!notify.unread"
+              :max="99"
+              class="topbar-badge"
+            >
+              <el-icon :size="20"><Bell /></el-icon>
             </el-badge>
           </el-button>
           <ThemeToggle />
@@ -103,7 +149,7 @@
                   <el-icon><User /></el-icon> 我的资料
                 </el-dropdown-item>
                 <el-dropdown-item command="groups">
-                  <el-icon><UserFilled /></el-icon> 我的小组
+                  <el-icon><School /></el-icon> 我的小组
                 </el-dropdown-item>
                 <el-dropdown-item divided command="logout">
                   <el-icon><SwitchButton /></el-icon> 退出登录
@@ -126,7 +172,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   HomeFilled, Files, Calendar, FolderOpened, ChatLineRound, Star, Bell,
-  UserFilled, Plus, ArrowDown, User, SwitchButton, Fold, Expand,
+  Plus, ArrowDown, User, SwitchButton, Fold, Expand, School,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
@@ -134,6 +180,7 @@ import { useNotifyStore } from '@/stores/notifications'
 import { useUIStore } from '@/stores/ui'
 import { useWS } from '@/composables/useWS'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
+import CoTaskLogo from '@/components/common/CoTaskLogo.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -156,6 +203,10 @@ const treeHref = computed(() => `/groups/${groups.currentId}/tree`)
 const timelineHref = computed(() => `/groups/${groups.currentId}/timeline`)
 const filesHref = computed(() => `/groups/${groups.currentId}/files`)
 const discussionHref = computed(() => `/groups/${groups.currentId}/discussion`)
+
+const currentGroup = computed(() =>
+  groups.list.find((g) => g.id === groups.currentId) ?? null,
+)
 
 function onSelect(idx: string) {
   if (idx) router.push(idx)
@@ -201,69 +252,420 @@ watch(() => route.params.gid, (gid) => {
 <style lang="scss" scoped>
 .app-shell { display: flex; height: 100vh; overflow: hidden; }
 
+/* ---------- Sidebar — lightweight, blends with page ---------- */
 .sidebar {
-  width: 220px;
+  /* Match Element Plus collapse menu width: icon + horizontal padding × 2 */
+  --sidebar-collapsed-width: 64px;
+  --sidebar-collapsed-hit: 44px;
+  --sidebar-logo-slot: 28px; /* matches CoTaskLogo sm mark */
+  width: 224px;
   background: var(--bg-card);
-  border-right: 1px solid var(--border-color);
-  transition: width .2s ease;
+  border-right: 1px solid var(--border-subtle);
+  transition: width 200ms ease;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  &.collapsed { width: 64px; }
+
+  &.collapsed {
+    width: var(--sidebar-collapsed-width);
+
+    /* .menu is on the same node as .el-menu--collapse (the <el-menu> root) */
+    .menu.el-menu--collapse {
+      --el-menu-base-level-padding: 0px;
+      --el-menu-icon-width: 24px;
+      width: var(--sidebar-collapsed-hit) !important;
+      margin: 0 auto;
+      border-right: none;
+      /* Match expanded .menu top padding (var(--space-2) on all sides) */
+      padding: var(--space-2) 0;
+
+      > :deep(.el-menu-item) {
+        width: var(--sidebar-collapsed-hit);
+        height: 40px;
+        line-height: 40px;
+        margin: var(--space-2) 0;
+        padding: 0 !important;
+        border-radius: var(--radius-sm);
+        box-sizing: border-box;
+        overflow: hidden;
+
+        .el-menu-tooltip__trigger {
+          padding: 0 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        [class^='el-icon'] {
+          margin: 0 !important;
+          width: auto !important;
+        }
+      }
+
+      > :deep(.el-menu-item:hover),
+      > :deep(.el-menu-item.is-active) {
+        background: transparent !important;
+      }
+
+      > :deep(.el-menu-item:hover) .el-menu-tooltip__trigger {
+        background: var(--bg-soft);
+        border-radius: var(--radius-sm);
+      }
+
+      > :deep(.el-menu-item.is-active) .el-menu-tooltip__trigger {
+        background: var(--color-primary-light);
+        border-radius: var(--radius-sm);
+      }
+    }
+  }
 }
 
 .logo-row {
   height: 56px;
+  min-height: 56px;
+  max-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0 var(--space-4);
+  flex-shrink: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  transition: none;
 }
-.logo { display: flex; align-items: center; gap: 4px; font-weight: 700; }
-.logo-mark {
-  background: var(--color-primary);
-  color: #fff;
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 8px;
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
-.logo-text { color: var(--color-primary); }
-.collapse-btn { padding: 4px; }
 
-.menu { border-right: none; flex: 1; overflow-y: auto; }
-.menu :deep(.el-menu) { border-right: none; background: transparent; }
-.menu :deep(.el-menu-item.is-active) { background: rgba(61,126,255,.08); color: var(--color-primary); }
-.msg-badge { margin-left: 8px; }
+.sidebar.collapsed .logo-row :deep(.cotask-logo) {
+  justify-content: center;
+}
 
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+/* Collapsed: logo only; expand control appears on hover (same 28px slot as mark) */
+.logo-row--compact {
+  justify-content: center;
+  padding: 0;
+}
 
+.logo-slot {
+  position: relative;
+  width: var(--sidebar-logo-slot);
+  height: var(--sidebar-logo-slot);
+  flex-shrink: 0;
+
+  .sidebar-brand {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s ease;
+
+    :deep(.cotask-logo__mark) {
+      width: var(--sidebar-logo-slot);
+      height: var(--sidebar-logo-slot);
+    }
+  }
+
+  .collapse-btn--reveal {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: unset;
+    padding: 0 !important;
+    margin: 0;
+    border-radius: var(--radius-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    color: var(--text-secondary);
+
+    &:hover,
+    &:focus-visible {
+      color: var(--text-primary);
+      background: var(--bg-soft) !important;
+    }
+  }
+
+  &:hover {
+    .sidebar-brand {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .collapse-btn--reveal {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+}
+
+.collapse-btn {
+  padding: var(--space-1);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  &:hover { color: var(--text-primary); }
+}
+
+.menu {
+  border-right: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-2);
+  background: transparent;
+
+  &:not(.el-menu--collapse) > :deep(.el-menu-item) {
+    height: 40px;
+    line-height: 40px;
+    border-radius: var(--radius-sm);
+    margin: var(--space-2) 0;
+    padding: 0 var(--space-3) !important;
+    color: var(--text-secondary);
+    font-size: var(--fs-base);
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background: var(--bg-soft);
+      color: var(--text-primary);
+    }
+
+    &.is-active {
+      background: var(--color-primary-light) !important;
+      color: var(--color-primary) !important;
+      font-weight: 500;
+    }
+
+    .el-icon {
+      font-size: 16px;
+      margin-right: var(--space-3);
+      color: inherit;
+    }
+  }
+
+}
+
+.msg-badge { margin-left: var(--space-2); }
+
+/* ---------- Main area ---------- */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ---------- Topbar — lighter divider, balanced ---------- */
 .topbar {
   height: 56px;
   background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  gap: 12px;
+  padding: 0 var(--space-6);
+  gap: var(--space-3);
+  flex-shrink: 0;
 }
-.topbar-left { display: flex; align-items: center; gap: 12px; }
-.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+
+  :deep(.topbar-icon-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    margin: 0;
+    vertical-align: middle;
+
+    .el-icon {
+      margin: 0;
+    }
+  }
+
+  :deep(.topbar-icon-trigger) {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  :deep(.topbar-badge) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    vertical-align: middle;
+  }
+}
 
 .user {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  &:hover { background: var(--bg-soft); }
-  .name { font-size: 14px; color: var(--text-primary); }
-}
-.group-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease;
 
+  &:hover { background: var(--bg-soft); }
+
+  .name {
+    font-size: var(--fs-base);
+    font-weight: 500;
+    color: var(--text-primary);
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Topbar group switcher ---------- */
+.group-select {
+  width: min(320px, 42vw);
+
+  :deep(.el-select__wrapper) {
+    min-height: 36px;
+    padding: 0 var(--space-3) 0 var(--space-2);
+    background: var(--bg-soft) !important;
+    border-radius: var(--control-radius-line) !important;
+    box-shadow: none !important;
+    transition: background 120ms ease, box-shadow 120ms ease;
+
+    &:hover {
+      background: var(--bg-overlay) !important;
+      box-shadow: none !important;
+    }
+
+    &.is-focused,
+    &.is-focus,
+    &:focus-within {
+      background: var(--bg-card) !important;
+      box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+    }
+  }
+
+  :deep(.el-select__selection) {
+    min-width: 0;
+  }
+
+  :deep(.el-select__selected-item) {
+    overflow: hidden;
+  }
+
+  :deep(.el-select__caret) {
+    color: var(--text-tertiary);
+  }
+}
+
+.group-select-icon {
+  color: var(--color-primary);
+  font-size: 16px;
+}
+
+.group-select-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.group-select-course {
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.group-select-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-select-role {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  color: var(--text-tertiary);
+
+  &.leader {
+    background: rgba(245, 158, 11, 0.14);
+    color: #B45309;
+  }
+}
+
+.group-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.group-opt-text {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.group-opt-course {
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.group-opt-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-opt-role {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-soft);
+  color: var(--text-tertiary);
+
+  &.leader {
+    background: rgba(245, 158, 11, 0.14);
+    color: #B45309;
+  }
+}
+
+/* ---------- Content area ---------- */
 .content {
   flex: 1;
   overflow: auto;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
 }
 </style>

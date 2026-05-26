@@ -5,44 +5,58 @@
       <div class="tb-left">
         <h1 class="pt-title">
           <span class="t-main">项目树</span>
-          <span v-if="group" class="t-sep">·</span>
-          <span v-if="group" class="t-course">{{ group.course_name }}</span>
-          <span v-if="group" class="t-sep">·</span>
-          <span v-if="group" class="t-name">{{ group.name }}</span>
+          <template v-if="group">
+            <span class="t-sep">/</span>
+            <span class="t-course">{{ group.course_name }}</span>
+            <span class="t-sep">/</span>
+            <span class="t-name">{{ group.name }}</span>
+          </template>
         </h1>
         <div class="view-switcher">
           <el-button-group>
-            <el-button type="primary">项目树</el-button>
-            <el-button @click="router.push(`/groups/${gid}/timeline`)">时间轴</el-button>
+            <el-button type="primary" size="small">
+              <el-icon><Files /></el-icon>&nbsp;项目树
+            </el-button>
+            <el-button size="small" @click="router.push(`/groups/${gid}/timeline`)">
+              <el-icon><Calendar /></el-icon>&nbsp;时间轴
+            </el-button>
           </el-button-group>
         </div>
       </div>
 
       <div class="tb-right">
+        <!-- Filter switch -->
         <el-switch
           v-model="focusOnMine"
           inline-prompt
-          active-text="仅看与我相关"
+          active-text="仅我的"
           inactive-text="全部"
           style="--el-switch-on-color: var(--color-primary);"
         />
+
+        <!-- Leader: Create & AI actions -->
         <template v-if="isLeader">
-          <el-button type="primary" @click="onAddRoot">
-            <el-icon><Plus /></el-icon>&nbsp;节点
+          <div class="tb-divider" />
+          <el-button type="primary" size="small" @click="onAddRoot">
+            <el-icon><Plus /></el-icon>&nbsp;新建节点
           </el-button>
-          <el-button @click="onAiGenerate">
+          <el-button size="small" @click="onAiGenerate">
             <el-icon><MagicStick /></el-icon>&nbsp;AI 生成
           </el-button>
-          <el-button @click="onAiEdit">
-            <el-icon><ChatLineRound /></el-icon>&nbsp;AI 对话编辑
+          <el-button size="small" @click="onAiEdit">
+            <el-icon><ChatLineRound /></el-icon>&nbsp;AI 对话
           </el-button>
-          <el-button @click="goInspiration">
-            <el-icon><Files /></el-icon>&nbsp;从模板导入
+          <el-button size="small" @click="goInspiration">
+            <el-icon><Promotion /></el-icon>&nbsp;导入模板
           </el-button>
         </template>
+
+        <!-- Export & info -->
+        <div class="tb-divider" />
         <el-dropdown @command="onExport">
-          <el-button>
-            导出 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          <el-button size="small">
+            <el-icon><Download /></el-icon>&nbsp;导出
+            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -51,20 +65,22 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-tag size="small" effect="plain" type="info">v{{ treeStore.version }}</el-tag>
-        <el-tooltip :content="`${members.length} 位成员`">
-          <span class="member-pill">
-            <el-icon><User /></el-icon> {{ members.length }}
+
+        <el-tooltip :content="`版本 ${treeStore.version} · ${members.length} 位成员`">
+          <span class="info-pill">
+            <el-icon><User /></el-icon>
+            <span>{{ members.length }}</span>
+            <span class="pill-sep">·</span>
+            <span>v{{ treeStore.version }}</span>
           </span>
         </el-tooltip>
-        <el-button
-          v-if="aiCollapsed"
-          text
-          @click="aiCollapsed = false"
-          title="展开 AI 助手"
-        >
-          <el-icon><MagicStick /></el-icon>
-        </el-button>
+
+        <!-- AI panel toggle -->
+        <el-tooltip v-if="aiCollapsed" content="展开 AI 助手">
+          <el-button size="small" text circle @click="aiCollapsed = false">
+            <el-icon><MagicStick /></el-icon>
+          </el-button>
+        </el-tooltip>
       </div>
     </header>
 
@@ -186,6 +202,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, MagicStick, ChatLineRound, Files, ArrowDown, User,
+  Calendar, Promotion, Download,
 } from '@element-plus/icons-vue'
 import { Api, type MemberInfo } from '@/api'
 import { useTreeStore } from '@/stores/tree'
@@ -476,11 +493,12 @@ function exportMd() {
 .pt {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   min-height: 0;
-  margin: -20px;
+  overflow: hidden;
 }
 
+/* ---------- Toolbar ---------- */
 .pt-toolbar {
   position: sticky;
   top: 0;
@@ -488,77 +506,118 @@ function exportMd() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 20px;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  height: 56px;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
+
 .tb-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-3);
   flex-wrap: wrap;
+  min-width: 0;
 }
+
 .tb-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
+
+.tb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+}
+
 .pt-title {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--fs-base);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  .t-main  { color: var(--text-primary); }
-  .t-sep   { color: var(--text-tertiary); font-weight: 400; }
-  .t-course{ color: var(--color-primary); }
-  .t-name  { color: var(--text-primary); }
-}
-.member-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 4px 10px;
-  background: var(--bg-soft);
-  border-radius: 999px;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+
+  .t-main   { color: var(--text-primary); }
+  .t-sep    { color: var(--text-tertiary); font-weight: 400; font-size: var(--fs-sm); }
+  .t-course { color: var(--color-primary); overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+  .t-name   { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 }
 
+.view-switcher { flex-shrink: 0; }
+
+.info-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  padding: 3px var(--space-3);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+
+  .pill-sep { opacity: 0.5; margin: 0 2px; }
+}
+
+/* ---------- Body ---------- */
 .pt-body {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 360px;
-  gap: 16px;
-  padding: 16px 20px;
+  gap: var(--space-6);
+  padding: var(--space-6);
   min-height: 0;
   overflow: hidden;
 }
+
 .pt-tree-col {
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: var(--space-1);
   min-height: 0;
 }
+
 .pt-ai-col {
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
+
+/* ---------- Diff summary ---------- */
 .diff-summary {
-  margin-top: 12px;
-  padding: 8px 12px;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   background: var(--bg-soft);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  border: 1px solid var(--border-color);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
 }
 
+/* ---------- Responsive ---------- */
 @media (max-width: 1100px) {
-  .pt-body { grid-template-columns: 1fr; }
+  .pt-body {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
   .pt-ai-col { display: none; }
+}
+
+@media (max-width: 768px) {
+  .pt-title .t-course,
+  .pt-title .t-name { display: none; }
 }
 </style>

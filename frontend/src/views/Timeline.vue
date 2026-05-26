@@ -1,57 +1,73 @@
 <template>
   <div class="timeline-page">
-    <!-- Toolbar -->
-    <div class="card toolbar">
-      <div class="toolbar-row">
-        <el-button-group class="view-switch">
-          <el-button :icon="Files" @click="goTree">项目树</el-button>
-          <el-button type="primary" :icon="Calendar">时间轴</el-button>
-        </el-button-group>
+    <!-- Sticky toolbar — same pattern as ProjectTree -->
+    <header class="tl-toolbar">
+      <div class="tb-left">
+        <h1 class="tl-title">
+          <span class="t-main">时间轴</span>
+          <template v-if="group">
+            <span class="t-sep">/</span>
+            <span class="t-course">{{ group.course_name }}</span>
+            <span class="t-sep">/</span>
+            <span class="t-name">{{ group.name }}</span>
+          </template>
+        </h1>
 
-        <div class="tb-section">
-          <span class="tb-label">视图:</span>
-          <el-radio-group v-model="view" size="default" @change="onViewChange">
-            <el-radio-button label="week">周</el-radio-button>
-            <el-radio-button label="month">月</el-radio-button>
-          </el-radio-group>
-        </div>
-
-        <div class="tb-section">
-          <span class="tb-label">日期:</span>
+        <div class="view-switcher">
           <el-button-group>
-            <el-button :icon="ArrowLeft" @click="shiftDate(-1)" />
-            <el-button @click="goToday">今天</el-button>
-            <el-button :icon="ArrowRight" @click="shiftDate(1)" />
+            <el-button size="small" @click="goTree">
+              <el-icon><Files /></el-icon>&nbsp;项目树
+            </el-button>
+            <el-button size="small" type="primary">
+              <el-icon><Calendar /></el-icon>&nbsp;时间轴
+            </el-button>
           </el-button-group>
-          <el-date-picker
-            v-model="startDate"
-            type="date"
-            value-format="YYYY-MM-DD"
-            :clearable="false"
-            style="width: 160px"
-            @change="loadTimeline"
-          />
-        </div>
-
-        <div class="tb-section">
-          <span class="tb-label">过滤:</span>
-          <el-switch
-            v-model="onlyMine"
-            active-text="仅看与我相关"
-            inline-prompt
-          />
-        </div>
-
-        <div class="tb-spacer" />
-
-        <div class="tb-section">
-          <span class="muted tiny">{{ dateRangeLabel }}</span>
         </div>
       </div>
-    </div>
+
+      <div class="tb-right">
+        <!-- Date navigation -->
+        <el-button-group size="small">
+          <el-button :icon="ArrowLeft" @click="shiftDate(-1)" />
+          <el-button @click="goToday">今天</el-button>
+          <el-button :icon="ArrowRight" @click="shiftDate(1)" />
+        </el-button-group>
+        <el-date-picker
+          v-model="startDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          :clearable="false"
+          style="width: 148px"
+          @change="loadTimeline"
+        />
+
+        <div class="tb-divider" />
+
+        <!-- View -->
+        <SegmentedControl
+          v-model="view"
+          size="sm"
+          :options="viewOptions"
+          @change="onViewChange"
+        />
+
+        <div class="tb-divider" />
+
+        <!-- Filter -->
+        <el-switch
+          v-model="onlyMine"
+          active-text="仅我的"
+          inline-prompt
+          style="--el-switch-on-color: var(--color-primary);"
+        />
+
+        <!-- Date range label -->
+        <span class="date-range-label">{{ dateRangeLabel }}</span>
+      </div>
+    </header>
 
     <!-- Body -->
-    <div class="body-grid">
+    <div class="tl-body">
       <!-- Gantt board -->
       <section class="board-col card">
         <div v-if="loading" class="loading-wrap">
@@ -129,6 +145,7 @@
   </div>
 </template>
 
+
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -137,13 +154,22 @@ import { ArrowLeft, ArrowRight, Calendar, Files } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { Api, type GroupRow, type TimelineResponse } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { useGroupsStore } from '@/stores/groups'
 import GanttBoard from '@/components/timeline/GanttBoard.vue'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
+
+const viewOptions = [
+  { label: '周视图', value: 'week' as const },
+  { label: '月视图', value: 'month' as const },
+]
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const groupsStore = useGroupsStore()
 
 const gid = computed(() => Number(route.params.gid))
+const group = computed(() => groupsStore.list.find((g) => g.id === gid.value) || null)
 
 const loading = ref(true)
 const view = ref<'week' | 'month'>('week')
@@ -248,48 +274,100 @@ watch(gid, (val, old) => {
 </script>
 
 <style lang="scss" scoped>
+/* ========================================================
+   Timeline — workspace layout matching ProjectTree
+   ======================================================== */
 .timeline-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 1400px;
-  margin: 0 auto;
-  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.toolbar {
-  padding: 12px 16px;
-}
-.toolbar-row {
+/* ---------- Sticky toolbar (identical pattern to ProjectTree) ---------- */
+.tl-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  height: 56px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.tb-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.tb-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
   flex-wrap: wrap;
 }
-.tb-section {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.tb-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.tb-spacer { flex: 1; }
 
-.body-grid {
+.tb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+}
+
+/* Breadcrumb title */
+.tl-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+
+  .t-main   { color: var(--text-primary); }
+  .t-sep    { color: var(--text-tertiary); font-weight: 400; font-size: var(--fs-sm); }
+  .t-course { color: var(--color-primary); overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+  .t-name   { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+}
+
+.view-switcher { flex-shrink: 0; }
+
+.date-range-label {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ---------- Body (gantt + side panel) ---------- */
+.tl-body {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 260px;
-  gap: 16px;
+  grid-template-columns: 1fr 280px;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  overflow: auto;
   align-items: start;
 }
 
 .board-col {
-  padding: 12px;
-  min-height: 500px;
-  height: calc(100vh - 220px);
+  padding: var(--space-3);
+  min-height: 480px;
   display: flex;
   flex-direction: column;
+
   & > * {
     flex: 1;
     min-height: 0;
@@ -299,67 +377,70 @@ watch(gid, (val, old) => {
 .side-col {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   position: sticky;
   top: 0;
 }
 
 .side-title {
-  font-size: 14px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
+/* ---------- Legend ---------- */
 .legend {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 
   li {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: var(--space-2);
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
   }
+
   .dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
+    width: 13px;
+    height: 13px;
+    border-radius: var(--radius-xs);
     flex-shrink: 0;
   }
-  .dot-todo        { background: #9CA3AF; }
+
+  .dot-todo        { background: var(--text-tertiary); }
   .dot-in_progress { background: var(--color-primary); }
   .dot-done        { background: var(--color-success); }
   .dot-blocked     { background: var(--color-danger); }
-  .dot-urgent      {
-    background: transparent;
-    border: 2px dashed var(--color-warning);
-  }
+  .dot-urgent      { background: transparent; border: 2px dashed var(--color-warning); }
 }
 
+/* ---------- Stats ---------- */
 .stats {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 
   li {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 13px;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
     padding: 6px 0;
-    border-bottom: 1px dashed var(--border-color);
+    border-bottom: 1px solid var(--border-subtle);
+
     &:last-child { border-bottom: none; }
+
     b {
-      font-size: 18px;
+      font-size: var(--fs-lg);
       font-weight: 700;
       color: var(--text-primary);
       &.is-urgent { color: var(--color-warning); }
@@ -367,23 +448,23 @@ watch(gid, (val, old) => {
   }
 }
 
-.loading-wrap { padding: 16px; }
+.loading-wrap { padding: var(--space-4); }
 
-@media (max-width: 992px) {
-  .body-grid { grid-template-columns: 1fr; }
+/* ---------- Responsive ---------- */
+@media (max-width: 1100px) {
+  .tl-body { grid-template-columns: 1fr; }
   .side-col {
     position: static;
-    flex-direction: row;
-    overflow-x: auto;
-    & > .card { min-width: 240px; }
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
   }
 }
 
 @media (max-width: 768px) {
-  .toolbar-row > * {
-    width: 100%;
-  }
-  .toolbar-row .tb-section { flex-wrap: wrap; }
-  .board-col { height: auto; min-height: 420px; }
+  .tl-toolbar { height: auto; padding: var(--space-3) var(--space-4); }
+  .tb-left, .tb-right { flex-wrap: wrap; }
+  .tl-title .t-course, .tl-title .t-name { display: none; }
+  .side-col { grid-template-columns: 1fr; }
 }
 </style>

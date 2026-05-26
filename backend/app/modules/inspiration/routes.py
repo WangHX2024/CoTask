@@ -12,12 +12,14 @@ from .schemas import (
     PostQuery,
     PostUpdate,
     TemplateImportRequest,
+    TemplatePreviewResponse,
 )
 from .service import (
     add_comment,
     create_post,
     delete_post,
     get_post,
+    get_template_preview,
     import_template,
     list_comments,
     list_posts,
@@ -69,7 +71,7 @@ class Like(MethodView):
     @require_auth
     @blp.response(200)
     def post(self, post_id):
-        return {"liked": toggle_like(current_user_id(), post_id)}
+        return toggle_like(current_user_id(), post_id)
 
 
 @blp.route("/posts/<int:post_id>/favorite")
@@ -77,7 +79,7 @@ class Favorite(MethodView):
     @require_auth
     @blp.response(200)
     def post(self, post_id):
-        return {"favored": toggle_favorite(current_user_id(), post_id)}
+        return toggle_favorite(current_user_id(), post_id)
 
 
 @blp.route("/posts/<int:post_id>/comments")
@@ -92,6 +94,14 @@ class Comments(MethodView):
     @blp.response(201, CommentBrief)
     def post(self, data, post_id):
         return add_comment(current_user_id(), post_id, data)
+
+
+@blp.route("/posts/<int:post_id>/template")
+class TemplatePreview(MethodView):
+    @require_auth
+    @blp.response(200, TemplatePreviewResponse)
+    def get(self, post_id):
+        return get_template_preview(post_id)
 
 
 @blp.route("/posts/<int:post_id>/import")

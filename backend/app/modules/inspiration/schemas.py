@@ -1,4 +1,6 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate, validates
+
+from ..tree.schemas import TaskNode
 
 CATEGORIES = ["template", "case", "tip", "script", "tool", "link"]
 SORTS = ["latest", "hot", "favorites"]
@@ -34,30 +36,41 @@ class PostBrief(Schema):
     created_at = fields.DateTime()
     liked_by_me = fields.Bool()
     favored_by_me = fields.Bool()
+    is_author = fields.Bool()
 
 
 class PostDetail(PostBrief):
     body_md = fields.Str()
     template_root_id = fields.Int(allow_none=True)
+    template_nodes = fields.List(fields.Nested(TaskNode), allow_none=True)
 
 
-class PostCreate(Schema):
+class _BodyMdRequiredMixin:
+    @validates("body_md")
+    def _validate_body_md_nonempty(self, value: str):
+        if not (value or "").strip():
+            raise ValidationError("body_md must not be empty")
+
+
+class PostCreate(_BodyMdRequiredMixin, Schema):
     title = fields.Str(required=True, validate=validate.Length(min=1, max=256))
     category = fields.Str(required=True, validate=validate.OneOf(CATEGORIES))
-    body_md = fields.Str(load_default="")
+    body_md = fields.Str(required=True)
     cover_url = fields.Str()
-    course_tag = fields.Str()
+    course_tag = fields.Str(validate=validate.Length(max=64), allow_none=True)
     link_url = fields.Str()
     anon = fields.Bool(load_default=False)
     template_from_group_id = fields.Int(allow_none=True)
 
 
-class PostUpdate(Schema):
+class PostUpdate(_BodyMdRequiredMixin, Schema):
     title = fields.Str(validate=validate.Length(min=1, max=256))
+    category = fields.Str(validate=validate.OneOf(CATEGORIES))
     body_md = fields.Str()
-    cover_url = fields.Str()
-    course_tag = fields.Str()
-    link_url = fields.Str()
+    cover_url = fields.Str(allow_none=True)
+    course_tag = fields.Str(validate=validate.Length(max=64), allow_none=True)
+    link_url = fields.Str(allow_none=True)
+    anon = fields.Bool()
 
 
 class CommentCreate(Schema):
@@ -76,11 +89,17 @@ class CommentBrief(Schema):
     anon = fields.Bool()
     parent_id = fields.Int(allow_none=True)
     created_at = fields.DateTime()
+    # Post comment total — included when creating a comment
+    comments = fields.Int(dump_only=True, allow_none=True)
 
 
 class TemplateImportRequest(Schema):
     to_group_id = fields.Int(required=True)
     mode = fields.Str(load_default="replace", validate=validate.OneOf(["replace", "append"]))
+
+
+class TemplatePreviewResponse(Schema):
+    nodes = fields.List(fields.Nested(TaskNode))
 
 
 class ListResponse(Schema):

@@ -1,5 +1,5 @@
 <template>
-  <div class="inspiration-page">
+  <div class="inspiration-page page">
     <!-- Hero -->
     <section class="hero">
       <div class="hero-inner">
@@ -11,77 +11,78 @@
           <el-input
             ref="searchRef"
             v-model="q"
-            placeholder="搜索灵感…  (Ctrl + K)"
+            class="hero-search-input"
+            placeholder="搜索标题、作者、课程名…  (Ctrl + K)"
             size="large"
             clearable
             :prefix-icon="Search"
             @keydown.enter="onSearch"
             @clear="onSearch"
-          >
-            <template #append>
-              <el-button :icon="Search" @click="onSearch">搜索</el-button>
-            </template>
-          </el-input>
+            @input="onSearchInput"
+          />
         </div>
       </div>
     </section>
 
-    <!-- Filter bar -->
-    <section class="filter-bar card">
-      <div class="filters">
-        <div class="tabs">
-          <button
-            v-for="c in categories"
-            :key="c.value"
-            class="tab-btn"
-            :class="{ active: category === c.value }"
-            @click="onCategory(c.value)"
-          >
-            {{ c.label }}
-          </button>
-        </div>
+    <!-- Filter toolbar -->
+    <div class="inspiration-toolbar">
+      <SegmentedControl
+        v-model="category"
+        size="md"
+        class="category-filter"
+        :options="categories"
+        @change="reset"
+      />
 
-        <div class="filter-right">
-          <el-select v-model="sort" size="default" style="width: 120px" @change="reset">
-            <el-option label="最新" value="latest" />
-            <el-option label="最热" value="hot" />
-            <el-option label="收藏多" value="favorites" />
-          </el-select>
-          <el-input
-            v-model="courseTag"
-            placeholder="课程标签"
-            size="default"
-            style="width: 160px"
-            clearable
-            @keydown.enter="reset"
-            @clear="reset"
-          />
-          <el-switch
-            v-model="favoritesOnly"
-            active-text="我收藏的"
-            inline-prompt
-            @change="reset"
-          />
-          <el-button type="primary" :icon="Plus" @click="goNew">发布</el-button>
-        </div>
+      <div class="toolbar-actions">
+        <el-select
+          v-model="sort"
+          class="toolbar-sort"
+          @change="reset"
+        >
+          <el-option label="最新" value="latest" />
+          <el-option label="最热" value="hot" />
+          <el-option label="收藏多" value="favorites" />
+        </el-select>
+        <button
+          type="button"
+          class="toolbar-filter-btn"
+          :class="{ active: favoritesOnly }"
+          @click="toggleFavorites"
+        >
+          <el-icon><Star /></el-icon>
+          <span>我收藏的</span>
+        </button>
+        <button
+          type="button"
+          class="toolbar-filter-btn"
+          :class="{ active: mineOnly }"
+          @click="toggleMine"
+        >
+          <el-icon><EditPen /></el-icon>
+          <span>我发布的</span>
+        </button>
+        <el-button type="primary" round class="toolbar-publish" @click="goNew">
+          <el-icon><Plus /></el-icon>&nbsp;发布
+        </el-button>
       </div>
-    </section>
+    </div>
 
     <!-- Grid -->
-    <section class="grid-section">
-      <div v-if="!loading && total" class="grid-meta muted tiny">
+    <section v-loading="refreshing" class="grid-section">
+      <div v-if="total" class="grid-meta muted tiny">
         共 {{ total }} 篇
       </div>
 
-      <template v-if="loading && !items.length">
+      <template v-if="initialLoading">
         <div class="grid">
           <div v-for="i in 6" :key="i" class="card sk-card">
             <el-skeleton animated>
               <template #template>
-                <el-skeleton-item variant="image" style="width: 100%; height: 160px" />
-                <div style="padding: 12px;">
+                <el-skeleton-item variant="image" class="sk-cover" />
+                <div class="sk-body">
                   <el-skeleton-item variant="h3" style="width: 60%" />
-                  <el-skeleton-item variant="text" style="margin-top: 12px;" />
+                  <el-skeleton-item variant="text" />
                   <el-skeleton-item variant="text" style="width: 80%" />
                 </div>
               </template>
@@ -92,7 +93,9 @@
 
       <template v-else-if="!items.length">
         <el-empty description="还没有相关内容，去发一篇吧" :image-size="120">
-          <el-button type="primary" @click="goNew">+ 发布</el-button>
+          <el-button type="primary" round class="toolbar-publish" @click="goNew">
+            <el-icon><Plus /></el-icon>&nbsp;发布
+          </el-button>
         </el-empty>
       </template>
 
@@ -126,7 +129,7 @@
                 <div class="post-author">
                   <el-avatar
                     :src="p.anon ? undefined : p.author_avatar"
-                    :size="22"
+                    :size="24"
                   >{{ authorInitial(p) }}</el-avatar>
                   <span class="author-name">{{ p.anon ? '匿名同学' : p.author_name }}</span>
                   <span v-if="p.course_tag" class="course-tag">#{{ p.course_tag }}</span>
@@ -134,21 +137,20 @@
 
                 <div class="post-stats">
                   <span :class="{ active: p.liked_by_me }">
-                    <el-icon><Star /></el-icon> {{ p.likes }}
+                    <el-icon><ThumbUpIcon :filled="p.liked_by_me" /></el-icon>
+                    {{ p.likes }}
                   </span>
                   <span :class="{ active: p.favored_by_me }">
-                    <el-icon><Collection /></el-icon> {{ p.favs }}
+                    <el-icon>
+                      <StarFilled v-if="p.favored_by_me" />
+                      <Star v-else />
+                    </el-icon>
+                    {{ p.favs }}
                   </span>
                   <span>
                     <el-icon><ChatDotRound /></el-icon> {{ p.comments }}
                   </span>
                 </div>
-              </div>
-
-              <div v-if="p.category === 'template' && p.has_template" class="tpl-action">
-                <el-button size="small" type="primary" plain @click.stop="goDetail(p.id)">
-                  导入到我的小组
-                </el-button>
               </div>
             </div>
           </article>
@@ -165,27 +167,32 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useDebounceFn } from '@vueuse/core'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Search, Plus, Star, Collection, ChatDotRound,
+  Search, Plus, Star, StarFilled, ChatDotRound, EditPen,
 } from '@element-plus/icons-vue'
 import { Api, type PostBrief } from '@/api'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import ThumbUpIcon from '@/components/common/ThumbUpIcon.vue'
 
+const route = useRoute()
 const router = useRouter()
 
 const searchRef = ref<any>(null)
 const q = ref('')
 const category = ref<string>('')
 const sort = ref<'latest' | 'hot' | 'favorites'>('latest')
-const courseTag = ref('')
 const favoritesOnly = ref(false)
+const mineOnly = ref(false)
 
 const items = ref<PostBrief[]>([])
 const total = ref(0)
 const page = ref(1)
 const size = 12
-const loading = ref(true)
+const initialLoading = ref(true)
+const refreshing = ref(false)
 const loadingMore = ref(false)
 
 const categories = [
@@ -229,11 +236,16 @@ async function fetchPosts(opts: { append?: boolean } = {}) {
   }
   if (q.value.trim()) params.q = q.value.trim()
   if (category.value) params.category = category.value
-  if (courseTag.value.trim()) params.course_tag = courseTag.value.trim()
   if (favoritesOnly.value) params.favorites = true
+  if (mineOnly.value) params.mine = true
 
-  if (opts.append) loadingMore.value = true
-  else loading.value = true
+  if (opts.append) {
+    loadingMore.value = true
+  } else if (items.value.length > 0) {
+    refreshing.value = true
+  } else {
+    initialLoading.value = true
+  }
 
   try {
     const data = await Api.posts(params)
@@ -243,7 +255,8 @@ async function fetchPosts(opts: { append?: boolean } = {}) {
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '加载灵感失败')
   } finally {
-    loading.value = false
+    initialLoading.value = false
+    refreshing.value = false
     loadingMore.value = false
   }
 }
@@ -252,11 +265,27 @@ function reset() {
   page.value = 1
   void fetchPosts()
 }
+
+const debouncedSearch = useDebounceFn(() => reset(), 350)
+
+function onSearchInput() {
+  debouncedSearch()
+}
+
 function onSearch() {
+  debouncedSearch.cancel()
   reset()
 }
-function onCategory(c: string) {
-  category.value = c
+
+function toggleFavorites() {
+  favoritesOnly.value = !favoritesOnly.value
+  if (favoritesOnly.value) mineOnly.value = false
+  reset()
+}
+
+function toggleMine() {
+  mineOnly.value = !mineOnly.value
+  if (mineOnly.value) favoritesOnly.value = false
   reset()
 }
 function loadMore() {
@@ -265,7 +294,10 @@ function loadMore() {
 }
 
 function goDetail(id: number) {
-  router.push(`/inspiration/p/${id}`)
+  router.push({
+    path: `/inspiration/p/${id}`,
+    query: { returnTo: route.fullPath },
+  })
 }
 function goNew() {
   router.push('/inspiration/new')
@@ -289,114 +321,241 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+/* Layout from .page (global) */
 .inspiration-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 1280px;
-  margin: 0 auto;
-  width: 100%;
+  --toolbar-h: 38px;
 }
 
-/* hero */
+/* ============================================================
+   Hero — 32px uniform padding
+   ============================================================ */
 .hero {
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: linear-gradient(135deg, #3D7EFF 0%, #6F4DFF 60%, #9B5BFF 100%);
-  color: #fff;
-  padding: 28px 28px 22px;
-  box-shadow: var(--shadow-card);
+  background: linear-gradient(135deg, #2563EB 0%, #4F46E5 55%, #7C3AED 100%);
+  color: var(--text-inverse);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-md);
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: 360px; height: 360px;
+    right: -100px; top: -120px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    width: 200px; height: 200px;
+    left: -60px; bottom: -80px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 50%;
+    pointer-events: none;
+  }
 }
-.hero::after {
-  content: '';
-  position: absolute;
-  width: 280px; height: 280px;
-  right: -80px; top: -100px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 50%;
-}
+
 .hero-inner {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-.hero-text {
-  h1 { margin: 0 0 4px 0; font-size: 26px; font-weight: 700; }
-  p  { margin: 0; color: rgba(255,255,255,0.85); }
-  .muted { color: rgba(255, 255, 255, 0.85); }
-}
-.hero-search { max-width: 720px; }
-.hero-search :deep(.el-input-group__append) {
-  background: rgba(255,255,255,0.9);
-  border-color: rgba(255,255,255,0.4);
+  gap: var(--space-6);
 }
 
-/* filter bar */
-.filter-bar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  padding: 12px 16px;
-}
-.filters {
+.hero-text {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-}
-.tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.tab-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all .15s ease;
-  &:hover { background: var(--bg-soft); color: var(--text-primary); }
-  &.active {
-    background: rgba(61,126,255,0.12);
-    color: var(--color-primary);
+  flex-direction: column;
+  gap: var(--space-1);
+
+  h1 {
+    margin: 0;
+    font-size: var(--fs-3xl);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  p {
+    margin: 0;
+    font-size: var(--fs-md);
+    color: rgba(255, 255, 255, 0.84);
+    line-height: 1.5;
   }
 }
-.filter-right {
+
+.hero-search {
+  max-width: 680px;
+}
+
+.hero-search-input {
+  :deep(.el-input__wrapper) {
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: var(--shadow-md);
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+    min-height: 48px;
+  }
+
+  :deep(.el-input__inner) {
+    font-size: var(--fs-md);
+  }
+
+  :deep(.el-input__prefix) {
+    color: var(--text-tertiary);
+  }
+}
+
+/* ============================================================
+   Filter toolbar — no outer card, sits in page flow
+   ============================================================ */
+.inspiration-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 
-/* grid */
-.grid-section { display: flex; flex-direction: column; gap: 12px; }
-.grid-meta { padding: 0 4px; }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+.category-filter {
+  width: fit-content;
+  max-width: 100%;
+  flex: 0 0 auto;
+  overflow-x: auto;
+
+  :deep(.segmented-control.segmented-control--md) {
+    height: var(--toolbar-h);
+    box-sizing: border-box;
+  }
+
+  :deep(.segmented-control--md .segmented-control__btn) {
+    min-height: calc(var(--toolbar-h) - 6px);
+    padding: 7px 12px;
+    box-sizing: border-box;
+  }
 }
 
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-sort {
+  width: 108px;
+
+  :deep(.el-select__wrapper) {
+    height: var(--toolbar-h) !important;
+    min-height: var(--toolbar-h) !important;
+    box-shadow: 0 0 0 1px var(--border-color) inset !important;
+    padding: 0 var(--space-4) !important;
+    background: var(--bg-card) !important;
+    box-sizing: border-box;
+  }
+
+  :deep(.el-select__selected-item) {
+    font-size: var(--fs-base);
+  }
+}
+
+.toolbar-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--toolbar-h);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 1px var(--border-color) inset;
+  color: var(--text-secondary);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+
+  .el-icon {
+    font-size: 14px;
+  }
+
+  &:hover:not(.active) {
+    color: var(--text-primary);
+    background: var(--bg-soft);
+    box-shadow: 0 0 0 1px var(--text-tertiary) inset;
+  }
+
+  &.active {
+    color: var(--color-primary);
+    background: var(--color-primary-light);
+    box-shadow: none;
+  }
+}
+
+.toolbar-publish {
+  height: var(--toolbar-h) !important;
+  min-height: var(--toolbar-h) !important;
+  padding: 0 var(--space-4) !important;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: 1;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================
+   Content grid — uniform card-grid spacing
+   ============================================================ */
+.grid-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.grid-meta { padding: 0 var(--space-1); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
+  gap: var(--space-6);
+}
+
+/* Skeleton card matches real post-card layout */
+.sk-card {
+  padding: 0;
+  overflow: hidden;
+}
+.sk-cover { width: 100%; height: 160px; }
+.sk-body  {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---------- Post card ---------- */
 .post-card {
   padding: 0;
   overflow: hidden;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  transition: transform .15s ease, box-shadow .15s ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
   }
 }
+
 .cover {
   position: relative;
   width: 100%;
@@ -409,56 +568,59 @@ onUnmounted(() => {
     height: 100%;
     object-fit: cover;
     display: block;
+    transition: transform 200ms ease;
   }
+
+  &:hover img { transform: scale(1.03); }
 }
+
 .cover-placeholder {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 18px;
+  color: var(--text-inverse);
+  font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: 1px;
 }
+
 .cover-tag {
   position: absolute;
-  top: 10px; left: 10px;
-  background: rgba(0,0,0,0.55);
-  color: #fff;
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
+  top: var(--space-2);
+  left: var(--space-2);
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text-inverse);
+  font-size: var(--fs-xs);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
   font-weight: 600;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
 }
 
+/* Card body — uniform 16px padding/gap (compact card) */
 .post-body {
-  padding: 12px 14px 14px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
 }
+
 .post-title {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.35;
+  line-height: 1.4;
 }
+
 .post-excerpt {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-}
-.clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .post-foot {
@@ -466,60 +628,70 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
 }
+
 .post-author {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   min-width: 0;
 
   .author-name {
-    max-width: 90px;
+    max-width: 80px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .course-tag {
     color: var(--color-primary);
     font-weight: 500;
+    font-size: var(--fs-xs);
   }
 }
+
 .post-stats {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
+
   span {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--space-1);
+    transition: color 120ms ease;
     &.active { color: var(--color-primary); }
   }
-}
-.tpl-action {
-  margin-top: 4px;
-  display: flex;
-  justify-content: flex-end;
+
+  :deep(.el-icon) {
+    font-size: 15px;
+    line-height: 1;
+  }
 }
 
 .load-more {
   display: flex;
   justify-content: center;
-  margin-top: 8px;
 }
+
 .load-end {
   text-align: center;
-  padding: 12px 0;
+  padding: var(--space-4) 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
 }
 
 @media (max-width: 768px) {
-  .hero { padding: 20px 16px; }
-  .hero-text h1 { font-size: 22px; }
+  .hero { padding: var(--space-6); }
+  .hero-text h1 { font-size: var(--fs-2xl); }
   .grid { grid-template-columns: 1fr; }
   .filters { flex-direction: column; align-items: stretch; }
   .filter-right { flex-direction: column; align-items: stretch; }

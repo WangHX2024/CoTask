@@ -1,59 +1,50 @@
 <template>
-  <div class="members-page">
-    <!-- Header -->
-    <div class="header-bar">
-      <div class="header-left">
-        <el-button text @click="goBack">
-          <el-icon><ArrowLeft /></el-icon>&nbsp;返回
-        </el-button>
-        <div class="title-block">
+  <div class="members-page page insp-sub-page">
+    <header class="insp-page-header">
+      <div class="insp-page-header__lead">
+        <button
+          type="button"
+          class="insp-capsule-btn insp-back-btn"
+          aria-label="返回我的小组"
+          @click="goBack"
+        >
+          <el-icon><ArrowLeft /></el-icon>
+          <span>返回</span>
+        </button>
+        <div class="page-header-text">
           <h1 class="page-title">成员管理</h1>
-          <div class="muted tiny">
-            <template v-if="group">
-              {{ group.course_name }} · {{ group.name }}
-            </template>
-          </div>
-        </div>
-
-        <!-- Invite code chip (leader) -->
-        <div
-          v-if="isLeader && group?.invite_code"
-          class="invite-chip"
-          @click="copyCode(group.invite_code!)"
-        >
-          <span class="chip-label">邀请码</span>
-          <code class="chip-code">{{ group.invite_code }}</code>
-          <el-icon class="copy-icon"><CopyDocument /></el-icon>
+          <p v-if="group" class="page-desc">{{ group.course_name }} · {{ group.name }}</p>
         </div>
       </div>
-
-      <div class="header-right">
-        <el-button
-          v-if="isLeader"
-          type="primary"
-          @click="showInvite = true"
+      <div v-if="isLeader && group?.invite_code" class="insp-page-actions">
+        <button
+          type="button"
+          class="insp-capsule-btn insp-capsule-btn--primary"
+          @click="openInviteDialog"
         >
-          <el-icon><Plus /></el-icon>&nbsp;邀请新成员
-        </el-button>
+          <el-icon><Plus /></el-icon>
+          <span>邀请成员</span>
+        </button>
       </div>
-    </div>
+    </header>
 
-    <!-- Loading -->
     <template v-if="loading">
-      <el-skeleton :rows="5" animated />
+      <div class="insp-panel members-skel">
+        <el-skeleton :rows="5" animated />
+      </div>
     </template>
 
-    <!-- Empty -->
     <template v-else-if="members.length === 0">
-      <el-empty description="还没有成员" />
+      <div class="insp-panel members-empty">
+        <el-empty description="还没有成员" :image-size="100" />
+      </div>
     </template>
 
-    <!-- List of member cards -->
-    <ul v-else class="member-list">
+    <ul v-else class="member-list insp-panel">
       <li
         v-for="m in members"
         :key="m.user_id"
-        class="member-row card"
+        class="member-row"
       >
         <div class="m-avatar">
           <el-avatar :src="m.avatar_url || undefined" :size="48">
@@ -65,35 +56,29 @@
           <div class="m-name-row">
             <span class="m-name">{{ m.name }}</span>
             <span
-              class="role-badge"
-              :class="m.role === 'leader' ? 'role-leader' : 'role-member'"
+              class="insp-tag"
+              :class="m.role === 'leader' ? 'insp-tag--leader' : 'insp-tag--member'"
             >
               {{ m.role === 'leader' ? '组长' : '组员' }}
             </span>
-            <span v-if="m.user_id === selfId" class="self-tag">我</span>
+            <span v-if="m.user_id === selfId" class="insp-tag insp-tag--self">我</span>
           </div>
           <div class="m-meta muted tiny">
-            <span v-if="isLeader && (m as any).phone">
-              <el-icon><Phone /></el-icon> {{ (m as any).phone }}
+            <span v-if="isLeader && (m as any).phone" class="m-meta__phone">
+              <el-icon><Phone /></el-icon>
+              {{ (m as any).phone }}
             </span>
             <span>加入于 {{ formatJoin(m.joined_at) }}</span>
           </div>
         </div>
 
-        <div class="m-contrib">
-          <div class="contrib-num">{{ m.contribution }}</div>
-          <div class="muted tiny">贡献分</div>
-        </div>
-
         <div class="m-skills">
           <template v-if="m.skills?.length">
-            <el-tag
+            <span
               v-for="s in m.skills.slice(0, 4)"
               :key="s"
-              size="small"
-              effect="plain"
-              class="skill-tag"
-            >{{ s }}</el-tag>
+              class="skill-pill"
+            >{{ s }}</span>
             <span v-if="m.skills.length > 4" class="muted tiny">
               +{{ m.skills.length - 4 }}
             </span>
@@ -102,105 +87,69 @@
         </div>
 
         <div class="m-actions">
-          <!-- Self row -->
           <template v-if="m.user_id === selfId">
-            <el-button
+            <button
               v-if="m.role === 'member'"
-              size="small"
-              type="danger"
-              plain
+              type="button"
+              class="insp-capsule-btn insp-capsule-btn--danger"
               @click="onLeave"
-            >退出小组</el-button>
-            <span v-else class="muted tiny self-leader-note">
-              组长需先转让
-            </span>
+            >
+              退出小组
+            </button>
+            <span v-else class="muted tiny self-leader-note">组长需先转让才可退出小组</span>
           </template>
-
-          <!-- Leader actions on others -->
           <template v-else-if="isLeader">
-            <el-button
-              size="small"
-              @click="onTransfer(m)"
-            >转让组长</el-button>
-            <el-button
-              size="small"
-              type="danger"
-              plain
+            <button type="button" class="insp-capsule-btn" @click="onTransfer(m)">
+              转让组长
+            </button>
+            <button
+              type="button"
+              class="insp-capsule-btn insp-capsule-btn--danger"
               @click="onKick(m)"
-            >踢出小组</el-button>
+            >
+              踢出小组
+            </button>
           </template>
         </div>
       </li>
     </ul>
 
-    <!-- Invite dialog -->
     <el-dialog
-      v-model="showInvite"
-      title="邀请新成员"
-      width="440px"
+      v-model="showInviteShare"
+      class="sub-page-dialog invite-share-dialog"
+      width="min(480px, 92vw)"
       :close-on-click-modal="true"
     >
-      <div class="invite-dialog">
-        <div class="hint muted">
-          将下方邀请码分享给同学，或让对方扫描二维码加入
+      <template #header>
+        <div class="invite-share__head">
+          <el-icon class="invite-share__icon"><Share /></el-icon>
+          <div>
+            <div class="invite-share__title">邀请成员</div>
+            <div class="muted tiny">{{ group?.course_name }} · {{ group?.name }}</div>
+          </div>
         </div>
+      </template>
 
-        <div class="big-code-block">
-          <div class="big-code">{{ group?.invite_code || '--------' }}</div>
-          <el-button
-            v-if="group?.invite_code"
-            type="primary"
-            plain
-            @click="copyCode(group.invite_code!)"
-          >
-            <el-icon><CopyDocument /></el-icon>&nbsp;复制邀请码
-          </el-button>
-        </div>
+      <p class="invite-share__pitch">{{ invitePitchText }}</p>
 
-        <!-- QR placeholder -->
-        <div class="qr-placeholder">
-          <svg viewBox="0 0 100 100" class="qr-svg" aria-hidden="true">
-            <rect x="0" y="0" width="100" height="100" fill="#fff" />
-            <g fill="#1F2937">
-              <!-- Corner squares -->
-              <rect x="5" y="5" width="20" height="20" />
-              <rect x="9" y="9" width="12" height="12" fill="#fff" />
-              <rect x="12" y="12" width="6" height="6" />
-              <rect x="75" y="5" width="20" height="20" />
-              <rect x="79" y="9" width="12" height="12" fill="#fff" />
-              <rect x="82" y="12" width="6" height="6" />
-              <rect x="5" y="75" width="20" height="20" />
-              <rect x="9" y="79" width="12" height="12" fill="#fff" />
-              <rect x="12" y="82" width="6" height="6" />
-              <!-- Dot pattern -->
-              <rect x="30" y="10" width="4" height="4" />
-              <rect x="40" y="10" width="4" height="4" />
-              <rect x="50" y="10" width="4" height="4" />
-              <rect x="60" y="10" width="4" height="4" />
-              <rect x="30" y="30" width="4" height="4" />
-              <rect x="40" y="30" width="4" height="4" />
-              <rect x="50" y="30" width="4" height="4" />
-              <rect x="60" y="30" width="4" height="4" />
-              <rect x="70" y="30" width="4" height="4" />
-              <rect x="30" y="50" width="4" height="4" />
-              <rect x="50" y="50" width="4" height="4" />
-              <rect x="70" y="50" width="4" height="4" />
-              <rect x="30" y="70" width="4" height="4" />
-              <rect x="40" y="70" width="4" height="4" />
-              <rect x="50" y="70" width="4" height="4" />
-              <rect x="60" y="70" width="4" height="4" />
-              <rect x="70" y="70" width="4" height="4" />
-              <rect x="80" y="35" width="4" height="4" />
-              <rect x="85" y="45" width="4" height="4" />
-              <rect x="35" y="40" width="4" height="4" />
-              <rect x="45" y="55" width="4" height="4" />
-              <rect x="55" y="60" width="4" height="4" />
-              <rect x="65" y="65" width="4" height="4" />
-            </g>
-          </svg>
-          <div class="qr-caption">扫码加入</div>
-        </div>
+      <div class="invite-share__code">
+        <span class="invite-share__code-label">邀请码</span>
+        <code class="invite-share__code-value">{{ group?.invite_code }}</code>
       </div>
+
+      <template #footer>
+        <div class="dialog-footer-actions">
+          <button type="button" class="insp-capsule-btn" @click="showInviteShare = false">关闭</button>
+          <button type="button" class="insp-capsule-btn" @click="copyInvitePitch">复制话术</button>
+          <button
+            type="button"
+            class="insp-capsule-btn insp-capsule-btn--primary"
+            @click="copyInviteCode"
+          >
+            复制邀请码
+          </button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -209,13 +158,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  ArrowLeft, CopyDocument, Plus, Phone,
-} from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, Phone, Share } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { Api, type GroupBrief, type MemberInfo } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
+import { buildGroupInvitePitch } from '@/utils/groupInvitePitch'
 
 const route = useRoute()
 const router = useRouter()
@@ -228,9 +176,18 @@ const selfId = computed(() => auth.user?.id || 0)
 const loading = ref(true)
 const group = ref<GroupBrief | null>(null)
 const members = ref<MemberInfo[]>([])
-const showInvite = ref(false)
+const showInviteShare = ref(false)
 
 const isLeader = computed(() => group.value?.role === 'leader')
+
+const inviteSiteUrl = computed(() =>
+  typeof window !== 'undefined' ? window.location.origin : '',
+)
+
+const invitePitchText = computed(() => {
+  if (!group.value) return ''
+  return buildGroupInvitePitch(group.value, inviteSiteUrl.value)
+})
 
 onMounted(loadAll)
 
@@ -242,7 +199,6 @@ async function loadAll() {
       Api.members(gid.value),
     ])
     group.value = g
-    // Sort: leader first, then by joined_at
     members.value = list.slice().sort((a, b) => {
       if (a.role !== b.role) return a.role === 'leader' ? -1 : 1
       return a.joined_at.localeCompare(b.joined_at)
@@ -258,13 +214,29 @@ function goBack() {
   router.push('/groups')
 }
 
-async function copyCode(code: string) {
+function openInviteDialog() {
+  if (!group.value?.invite_code) return
+  showInviteShare.value = true
+}
+
+async function copyText(text: string, okMsg: string) {
   try {
-    await navigator.clipboard.writeText(code)
-    ElMessage.success('邀请码已复制')
+    await navigator.clipboard.writeText(text)
+    ElMessage.success(okMsg)
   } catch {
     ElMessage.warning('复制失败，请手动复制')
   }
+}
+
+async function copyInvitePitch() {
+  if (!invitePitchText.value) return
+  await copyText(invitePitchText.value, '邀请话术已复制')
+}
+
+async function copyInviteCode() {
+  const code = group.value?.invite_code
+  if (!code) return
+  await copyText(code, '邀请码已复制')
 }
 
 function formatJoin(iso: string) {
@@ -333,110 +305,68 @@ async function onLeave() {
 }
 </script>
 
+<style lang="scss">
+@use '@/styles/inspiration-pages.scss';
+</style>
+
 <style lang="scss" scoped>
-.members-page {
-  max-width: 1080px;
-  margin: 0 auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.title-block {
-  display: flex;
-  flex-direction: column;
-}
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.invite-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-soft);
-  border: 1px dashed var(--border-color);
-  border-radius: 999px;
-  padding: 4px 12px;
-  cursor: pointer;
-  transition: background .12s;
-  &:hover { background: var(--bg-card); }
-
-  .chip-label { font-size: 11px; color: var(--text-tertiary); }
-  .chip-code {
-    font-family: SFMono-Regular, Menlo, Consolas, monospace;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    color: var(--text-primary);
-  }
-  .copy-icon { color: var(--color-primary); }
+.members-skel,
+.members-empty {
+  padding: var(--space-6);
 }
 
 .member-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
+  display: grid;
+  /* Shared column tracks so skill tags align across rows */
+  grid-template-columns: 52px minmax(160px, 240px) minmax(0, 1fr) auto;
+  column-gap: var(--space-6);
 }
 
 .member-row {
   display: grid;
-  grid-template-columns: auto 1.5fr 90px 1.5fr auto;
-  gap: 16px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  padding: 14px 16px;
+  min-height: 80px;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 120ms ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--bg-soft);
+  }
 }
-.m-info { min-width: 0; }
+
+.m-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
 .m-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
+
 .m-name {
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.role-badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
-.role-leader {
-  background: rgba(230,162,60,0.16);
-  color: #B45309;
-}
-.role-member {
-  background: rgba(61,126,255,0.14);
-  color: #1D4ED8;
-}
-.self-tag {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
+.insp-tag--self {
   background: var(--bg-soft);
   color: var(--text-secondary);
 }
@@ -445,105 +375,136 @@ async function onLeave() {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-  span { display: inline-flex; align-items: center; gap: 4px; }
+  gap: var(--space-3);
 }
 
-.m-contrib {
-  text-align: center;
-  .contrib-num {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--color-primary);
-    line-height: 1;
-  }
+.m-meta__phone {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .m-skills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-2);
+  row-gap: var(--space-2);
   align-items: center;
-  .skill-tag { font-size: 11px; }
+  align-content: center;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  justify-content: flex-start;
+}
+
+.skill-pill {
+  display: inline-flex;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
 }
 
 .m-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
   justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-left: var(--space-2);
 }
+
 .self-leader-note {
-  font-style: italic;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 
-/* Invite dialog */
-.invite-dialog {
+.invite-share__head {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: center;
-  padding: 4px;
-
-  .hint { text-align: center; }
+  align-items: flex-start;
+  gap: var(--space-3);
 }
-.big-code-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 24px;
+
+.invite-share__icon {
+  font-size: 22px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.invite-share__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.invite-share__pitch {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
   background: var(--bg-soft);
-  border-radius: var(--radius-md);
-  width: 100%;
-
-  .big-code {
-    font-family: SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 30px;
-    font-weight: 700;
-    letter-spacing: 6px;
-    color: var(--color-primary);
-  }
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-base);
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-line;
 }
 
-.qr-placeholder {
+.invite-share__code {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 8px;
-  background: #fff;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+}
 
-  .qr-svg {
-    width: 160px;
-    height: 160px;
-    display: block;
-  }
-  .qr-caption {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
+.invite-share__code-label {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.invite-share__code-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--color-primary);
+}
+
+.dialog-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 @media (max-width: 760px) {
-  .member-row {
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-      "av info"
-      "av meta"
-      "contrib skills"
-      "actions actions";
-    gap: 8px 12px;
+  .member-list {
+    display: block;
   }
-  .m-avatar { grid-area: av; }
-  .m-info { grid-area: info; }
-  .m-contrib { grid-area: contrib; text-align: left; }
-  .m-skills { grid-area: skills; }
-  .m-actions { grid-area: actions; justify-content: flex-start; }
 
-  .header-bar { flex-direction: column; align-items: stretch; }
-  .header-left { flex-wrap: wrap; }
+  .member-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-4);
+    min-height: 0;
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .m-skills,
+  .m-actions {
+    grid-column: 1 / -1;
+  }
+
+  .m-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

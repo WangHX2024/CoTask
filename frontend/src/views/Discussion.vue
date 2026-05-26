@@ -12,12 +12,12 @@
         <div
           v-for="c in channels"
           :key="c.id"
-          class="ch-item"
-          :class="{ active: currentChannelId === c.id }"
+          class="list-row ch-item"
+          :class="{ 'is-active': currentChannelId === c.id }"
           @click="selectChannel(c.id)"
         >
           <span class="ch-hash">#</span>
-          <span class="ch-name">{{ c.name }}</span>
+          <span class="list-row__text">{{ c.name }}</span>
         </div>
         <div v-if="!channels.length && !loadingChannels" class="empty-tip">
           暂无频道
@@ -74,7 +74,7 @@
         >
           <el-avatar
             :src="m.anon ? '' : m.author_avatar"
-            :size="36"
+            :size="32"
             class="msg-avatar"
           >
             {{ msgInitial(m) }}
@@ -141,11 +141,11 @@
             <div
               v-for="(u, i) in mentionCandidates"
               :key="u.user_id"
-              class="mention-item"
-              :class="{ active: i === mentionIdx }"
+              class="list-row mention-item"
+              :class="{ 'is-active': i === mentionIdx }"
               @mousedown.prevent="pickMention(u)"
             >
-              <el-avatar :src="u.avatar_url" :size="22">{{ (u.name || '?').slice(0,1) }}</el-avatar>
+              <el-avatar :src="u.avatar_url" :size="24">{{ (u.name || '?').slice(0,1) }}</el-avatar>
               <span>{{ u.name }}</span>
             </div>
           </div>
@@ -558,13 +558,16 @@ watch(gid, async () => {
 <style lang="scss" scoped>
 .disc-page {
   display: flex;
-  gap: 16px;
-  height: 100%;
+  gap: var(--space-5);
+  flex: 1;
   min-height: 0;
+  padding: var(--space-6);
+  box-sizing: border-box;
 }
 
+/* ---------- Left channel sidebar ---------- */
 .disc-left {
-  width: 240px;
+  width: 220px;
   flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -572,44 +575,43 @@ watch(gid, async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
+
 .disc-left-head {
-  height: 44px;
-  padding: 0 12px;
+  height: 48px;
+  padding: 0 var(--space-4);
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
-  .disc-title { font-weight: 600; font-size: 13px; color: var(--text-primary); }
-}
-.disc-channels {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px;
-}
-.ch-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-primary);
-  &:hover { background: var(--bg-soft); }
-  &.active {
-    background: rgba(61,126,255,.10);
-    color: var(--color-primary);
-  }
-  .ch-hash { color: var(--text-tertiary); font-weight: 600; }
-  .ch-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  flex-shrink: 0;
+
+  .disc-title {
+    font-weight: 600;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 }
 
+.disc-channels {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+/* Channel item — extends global .list-row with a leading "#" mark */
+.ch-item .ch-hash {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  font-size: var(--fs-base);
+  flex-shrink: 0;
+}
+.ch-item.is-active .ch-hash { color: var(--color-primary); }
+
+/* ---------- Right message panel ---------- */
 .disc-right {
   flex: 1;
   min-width: 0;
@@ -619,16 +621,21 @@ watch(gid, async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
+
 .disc-header {
-  height: 50px;
-  padding: 0 16px;
+  height: 48px;
+  padding: 0 var(--space-6);
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
-  .hdr-left { display: flex; align-items: center; gap: 8px; }
-  .hdr-name { font-weight: 600; color: var(--text-primary); font-size: 15px; }
+  flex-shrink: 0;
+
+  .hdr-left { display: flex; align-items: center; gap: var(--space-2); }
+  .hdr-name { font-weight: 600; color: var(--text-primary); font-size: var(--fs-md); }
+
   .ch-hash.large {
     font-size: 18px;
     color: var(--text-tertiary);
@@ -636,90 +643,112 @@ watch(gid, async () => {
   }
 }
 
+/* ---------- Message list ---------- */
 .msg-list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: var(--space-4) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
+
 .msg-row {
   display: flex;
-  gap: 10px;
-  padding: 6px 8px;
+  gap: var(--space-3);
+  padding: var(--space-2);
   border-radius: var(--radius-sm);
+  transition: background 120ms ease;
+
   &:hover {
     background: var(--bg-soft);
     .msg-actions { opacity: 1; }
   }
 }
+
 .msg-avatar { flex-shrink: 0; }
+
 .msg-body-wrap { flex: 1; min-width: 0; }
+
 .msg-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
-  .msg-author { color: var(--text-primary); font-weight: 600; font-size: 13px; }
+
+  .msg-author {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: var(--fs-base);
+  }
+
   .msg-actions {
     margin-left: auto;
     opacity: 0;
-    transition: opacity .15s ease;
+    transition: opacity 120ms ease;
   }
 }
+
 .msg-quote {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-left: 3px solid var(--border-color);
-  background: var(--bg-soft);
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-primary-lighter);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  margin: 4px 0;
-  font-size: 12px;
+  margin: var(--space-1) 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
 }
+
 .msg-body {
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: var(--fs-base);
+  line-height: 1.6;
   word-break: break-word;
   white-space: pre-wrap;
   color: var(--text-primary);
 }
+
 .msg-body :deep(.at-mention) {
   color: var(--color-primary);
-  background: rgba(61,126,255,.10);
-  border-radius: 4px;
+  background: var(--color-primary-light);
+  border-radius: var(--radius-xs);
   padding: 0 4px;
   font-weight: 500;
 }
 
+/* ---------- Empty tip ---------- */
 .empty-tip {
-  padding: 16px;
+  padding: var(--space-4);
   text-align: center;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
+
   &.big {
-    padding: 60px 16px;
+    padding: var(--space-10) var(--space-4);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-3);
+
     .el-icon { font-size: 36px; }
     p { margin: 0; }
   }
 }
 
+/* ---------- Quote bar ---------- */
 .quote-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: var(--bg-soft);
-  border-top: 1px solid var(--border-color);
-  font-size: 12px;
+  gap: var(--space-2);
+  padding: 5px var(--space-4);
+  background: var(--color-primary-lighter);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
+
   .quote-preview {
     flex: 1;
     overflow: hidden;
@@ -728,24 +757,22 @@ watch(gid, async () => {
   }
 }
 
+/* ---------- Input bar ---------- */
 .input-bar {
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-6);
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  .input-left { padding-bottom: 4px; }
-  .input-mid {
-    flex: 1;
-    min-width: 0;
-    position: relative;
-  }
-  .input-right {
-    padding-bottom: 0;
-  }
+  gap: var(--space-2);
+  flex-shrink: 0;
+
+  .input-left  { padding-bottom: var(--space-1); }
+  .input-mid   { flex: 1; min-width: 0; position: relative; }
+  .input-right { padding-bottom: 0; }
 }
 
+/* ---------- Mention popup ---------- */
 .mention-pop {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -755,33 +782,25 @@ watch(gid, async () => {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  padding: 4px;
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1);
   z-index: 5;
 }
-.mention-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  &:hover, &.active {
-    background: rgba(61,126,255,.10);
-    color: var(--color-primary);
-  }
-}
 
+/* Mention popup row — uses global .list-row */
+
+/* ---------- Mobile channel picker ---------- */
 .mobile-channel-picker {
   display: none;
   width: 100%;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
+
   .mc-select { flex: 1; }
 }
 
+/* ---------- Responsive ---------- */
 @media (max-width: 768px) {
   .disc-page { flex-direction: column; }
   .disc-left { display: none; }

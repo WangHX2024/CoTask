@@ -1,8 +1,9 @@
-.PHONY: help up down build logs ps restart migrate seed shell-api shell-db test fmt lint clean
+.PHONY: help up dev down build logs ps restart migrate seed shell-api shell-db test fmt lint clean
 
 help:
 	@echo "CoTask 开发命令"
-	@echo "  make up        启动全部服务"
+	@echo "  make up        启动全部服务（生产模式，前端静态构建）"
+	@echo "  make dev       启动全部服务（开发模式，前端 Vite HMR）"
 	@echo "  make down      停止全部服务"
 	@echo "  make build     重新构建镜像"
 	@echo "  make migrate   执行数据库迁移"
@@ -17,6 +18,12 @@ help:
 up:
 	@[ -f .env ] || cp .env.example .env
 	docker compose up -d --build
+
+# Development mode: Vite dev server with HMR, source code mounted as volume.
+# Access at http://localhost:5173 (direct) or http://localhost:80 (via Nginx).
+dev:
+	@[ -f .env ] || cp .env.example .env
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 down:
 	docker compose down

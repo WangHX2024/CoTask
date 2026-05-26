@@ -24,9 +24,10 @@ def update_profile(uid: int, data: dict) -> User:
     return user
 
 
-def set_skills(uid: int, skills: list[str]) -> list[str]:
+def set_skills(uid: int, skills: list[str] | None) -> list[str]:
     user = get_user(uid)
-    skills_clean = [s.strip()[:32] for s in dict.fromkeys(skills) if s.strip()][:30]
+    raw = skills if skills is not None else []
+    skills_clean = [s.strip()[:32] for s in dict.fromkeys(raw) if s and s.strip()][:30]
     with tx() as s:
         s.execute(db.delete(UserSkill).where(UserSkill.user_id == user.id))
         for skill in skills_clean:

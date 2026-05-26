@@ -1,22 +1,45 @@
 <template>
-  <div class="edit-page">
-    <header class="edit-head card">
-      <div>
-        <h1 class="title">{{ isEdit ? '编辑灵感' : '发布灵感' }}</h1>
-        <p class="muted tiny">分享你的模板、案例、干货、话术、工具或网址给其他同学</p>
+  <div class="edit-page insp-sub-page page">
+    <header class="insp-page-header">
+      <div class="insp-page-header__lead">
+        <button
+          type="button"
+          class="insp-capsule-btn insp-back-btn"
+          aria-label="返回灵感广场"
+          @click="goBack"
+        >
+          <el-icon><ArrowLeft /></el-icon>
+          <span>返回</span>
+        </button>
+        <div class="page-header-text">
+          <h1 class="page-title">{{ isEdit ? '编辑灵感' : '发布灵感' }}</h1>
+          <p class="page-desc">分享你的模板、案例、干货、话术、工具或网址给其他同学</p>
+        </div>
       </div>
-      <div class="head-actions">
-        <el-button @click="onCancel">取消</el-button>
-        <el-button @click="onSaveDraft" :loading="busy.draft">保存草稿</el-button>
-        <el-button type="primary" :loading="busy.publish" @click="onPublish">
-          {{ isEdit ? '保存' : '发布' }}
-        </el-button>
+      <div class="insp-page-actions">
+        <button type="button" class="insp-capsule-btn" @click="goBack">取消</button>
+        <button
+          v-if="!isEdit"
+          type="button"
+          class="insp-capsule-btn"
+          :disabled="busy.publish"
+          @click="onPublish(true)"
+        >
+          {{ busy.publish ? '提交中…' : '匿名发布' }}
+        </button>
+        <button
+          type="button"
+          class="insp-capsule-btn insp-capsule-btn--primary"
+          :disabled="busy.publish"
+          @click="isEdit ? onSave() : onPublish(false)"
+        >
+          {{ busy.publish ? '提交中…' : (isEdit ? '保存' : '发布') }}
+        </button>
       </div>
     </header>
 
-    <div class="form-grid">
-      <!-- Form column -->
-      <section class="form-col">
+    <div class="insp-form-grid">
+      <section class="insp-form-col">
         <el-form
           ref="formRef"
           :model="form"
@@ -24,10 +47,11 @@
           label-position="top"
           @submit.prevent
         >
-          <div class="card form-card">
+          <div class="insp-panel">
             <el-form-item label="标题" prop="title">
               <el-input
                 v-model="form.title"
+                class="insp-capsule-input"
                 placeholder="一句话总结你的灵感"
                 maxlength="80"
                 show-word-limit
@@ -35,16 +59,12 @@
             </el-form-item>
 
             <el-form-item label="类别" prop="category">
-              <el-radio-group v-model="form.category">
-                <el-radio
-                  v-for="c in categoryOptions"
-                  :key="c.value"
-                  :value="c.value"
-                  :label="c.value"
-                >
-                  {{ c.label }}
-                </el-radio>
-              </el-radio-group>
+              <SegmentedControl
+                v-model="form.category"
+                size="md"
+                class="category-segment"
+                :options="categoryOptions"
+              />
             </el-form-item>
 
             <el-form-item
@@ -54,24 +74,26 @@
             >
               <el-input
                 v-model="form.link_url"
+                class="insp-capsule-input"
                 placeholder="https://…"
                 clearable
               />
             </el-form-item>
 
-            <el-form-item label="课程标签">
-              <el-autocomplete
+            <el-form-item label="课程名 (可选)">
+              <el-input
                 v-model="form.course_tag"
-                :fetch-suggestions="queryCourseTag"
-                placeholder="比如：高数 / 软工导论"
+                class="insp-capsule-input"
+                placeholder="手动填写，如：高等数学、软件工程导论"
+                maxlength="64"
                 clearable
-                style="width: 100%;"
               />
             </el-form-item>
 
             <el-form-item label="封面图 URL (可选)">
               <el-input
                 v-model="form.cover_url"
+                class="insp-capsule-input"
                 placeholder="https://…"
                 clearable
               />
@@ -84,64 +106,84 @@
               v-if="form.category === 'template'"
               label="来源小组 (作为模板)"
             >
-              <el-select
-                v-model="form.template_from_group_id"
-                placeholder="选择一个你管理的小组"
-                clearable
-                style="width: 100%;"
-                :disabled="!leaderGroups.length"
-              >
-                <el-option
-                  v-for="g in leaderGroups"
-                  :key="g.id"
-                  :value="g.id"
-                  :label="`[${g.course_name}] ${g.name}`"
-                />
-              </el-select>
-              <div v-if="!leaderGroups.length" class="muted tiny mt-4">
-                你目前不是任何小组的组长。
+              <div class="template-source">
+                <el-select
+                  v-model="form.template_from_group_id"
+                  class="insp-capsule-select"
+                  popper-class="insp-select-popper"
+                  placeholder="选择一个你管理的小组"
+                  clearable
+                  :disabled="!leaderGroups.length"
+                  @change="onTemplateGroupChange"
+                >
+                  <el-option
+                    v-for="g in leaderGroups"
+                    :key="g.id"
+                    :value="g.id"
+                    :label="`[${g.course_name}] ${g.name}`"
+                  />
+                </el-select>
+                <p v-if="!leaderGroups.length" class="muted tiny template-source__hint">
+                  你目前不是任何小组的组长。
+                </p>
+
+                <div
+                  v-else-if="form.template_from_group_id"
+                  class="template-preview-inset"
+                  v-loading="templatePreviewLoading"
+                >
+                  <div class="template-preview__bar">
+                    <span class="template-preview__label">结构预览</span>
+                    <span v-if="templatePreviewStats" class="template-preview__stats muted tiny">
+                      {{ templatePreviewStats }}
+                    </span>
+                  </div>
+                  <div v-if="templatePreviewNodes.length" class="template-preview__tree-wrap">
+                    <TemplatePreviewTree :nodes="templatePreviewNodes" />
+                  </div>
+                  <p v-else-if="!templatePreviewLoading" class="muted tiny template-preview__empty">
+                    该小组还没有任务节点
+                  </p>
+                </div>
               </div>
             </el-form-item>
 
-            <el-form-item>
-              <el-switch v-model="form.anon" active-text="匿名发布" />
-            </el-form-item>
-          </div>
-
-          <div class="card body-card">
-            <div class="body-head">
-              <label class="lbl">正文 (Markdown)</label>
-              <el-switch
-                v-model="preview"
-                active-text="预览"
-                inline-prompt
-              />
-            </div>
-
-            <div class="body-area">
-              <el-input
-                v-if="!preview"
-                v-model="form.body_md"
-                type="textarea"
-                :rows="22"
-                placeholder="使用 Markdown 写下你的灵感… 支持标题、列表、代码块、链接、图片等"
-                resize="vertical"
-              />
-              <div v-else class="md-preview markdown-body" v-html="renderedPreview"></div>
+            <div class="body-section">
+              <div class="body-label-row">
+                <span class="body-label-row__text">正文 (Markdown)</span>
+                <SegmentedControl
+                  v-model="editorMode"
+                  size="sm"
+                  :options="editorModeOptions"
+                />
+              </div>
+              <el-form-item prop="body_md" class="body-form-item body-form-item--no-label">
+                <div class="body-area">
+                  <el-input
+                    v-if="editorMode === 'edit'"
+                    v-model="form.body_md"
+                    class="insp-capsule-textarea"
+                    type="textarea"
+                    :rows="22"
+                    placeholder="使用 Markdown 写下你的灵感… 支持标题、列表、代码块、链接、图片等"
+                    resize="vertical"
+                  />
+                  <div v-else class="md-preview markdown-body" v-html="renderedPreview"></div>
+                </div>
+              </el-form-item>
             </div>
           </div>
         </el-form>
       </section>
 
-      <!-- Tips column -->
-      <aside class="tips-col">
-        <div class="card tips-card">
-          <div class="side-title">写作小贴士</div>
+      <aside class="insp-side-col">
+        <div class="insp-panel tips-card">
+          <div class="insp-side-title">写作小贴士</div>
           <ul class="tips">
             <li><b>标题</b> 简洁有力，控制在 80 字以内</li>
             <li><b>正文</b> 支持 Markdown：标题 #、列表 -、代码 ``、链接 [文字](url)</li>
             <li><b>模板</b> 类别会让其他组长可以一键导入到自己的项目</li>
-            <li><b>课程标签</b> 让同课程的同学更容易发现你</li>
+            <li><b>课程名</b> 手动填写，方便同课程同学搜索到你的帖子</li>
             <li><b>匿名发布</b> 不显示你的头像与姓名</li>
           </ul>
         </div>
@@ -151,13 +193,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { Api } from '@/api'
+import { Api, type TaskNode } from '@/api'
 import { useGroupsStore } from '@/stores/groups'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import TemplatePreviewTree from '@/components/inspiration/TemplatePreviewTree.vue'
+import { previewTreeStats } from '@/components/inspiration/templatePreviewTree'
 
 const route = useRoute()
 const router = useRouter()
@@ -169,8 +215,14 @@ const editId = computed(() => {
 })
 const isEdit = computed(() => editId.value != null)
 
+const returnTo = computed(() => {
+  const q = route.query.returnTo
+  if (typeof q === 'string' && q.startsWith('/')) return q
+  return null
+})
+
 const formRef = ref<FormInstance>()
-const preview = ref(false)
+const editorMode = ref<'edit' | 'preview'>('edit')
 
 const form = reactive({
   title: '',
@@ -202,9 +254,19 @@ const rules = {
       trigger: 'blur',
     },
   ],
+  body_md: [
+    {
+      required: true,
+      validator: (_r: any, val: string, cb: any) => {
+        if (!val?.trim()) return cb(new Error('请输入正文'))
+        cb()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
-const busy = reactive({ publish: false, draft: false })
+const busy = reactive({ publish: false })
 
 const categoryOptions = [
   { label: '干货', value: 'tip' },
@@ -215,22 +277,52 @@ const categoryOptions = [
   { label: '网址', value: 'link' },
 ]
 
+const editorModeOptions = [
+  { label: '编辑', value: 'edit' },
+  { label: '预览', value: 'preview' },
+]
+
 const leaderGroups = computed(() =>
   groupsStore.list.filter((g) => g.role === 'leader'),
 )
 
-const commonCourseTags = [
-  '高等数学', '线性代数', '概率论', '软件工程',
-  '数据结构', '操作系统', '计算机网络', '人工智能',
-  '产品设计', '市场营销', '英语口语', '微观经济学',
-]
-function queryCourseTag(query: string, cb: (arr: any[]) => void) {
-  const q = (query || '').toLowerCase()
-  const list = commonCourseTags
-    .filter((t) => !q || t.toLowerCase().includes(q))
-    .map((value) => ({ value }))
-  cb(list)
+const templatePreviewLoading = ref(false)
+const templatePreviewNodes = ref<TaskNode[]>([])
+
+const templatePreviewStats = computed(() =>
+  previewTreeStats(templatePreviewNodes.value),
+)
+
+async function loadTemplatePreview(groupId: number | null) {
+  templatePreviewNodes.value = []
+  if (!groupId) return
+  templatePreviewLoading.value = true
+  try {
+    const tree = await Api.getTree(groupId)
+    templatePreviewNodes.value = tree.nodes
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '加载模板预览失败')
+  } finally {
+    templatePreviewLoading.value = false
+  }
 }
+
+function onTemplateGroupChange(gid: number | string | null | undefined) {
+  const id = gid == null || gid === '' ? null : Number(gid)
+  void loadTemplatePreview(Number.isFinite(id) ? id : null)
+}
+
+watch(
+  () => form.category,
+  (cat) => {
+    if (cat !== 'template') {
+      form.template_from_group_id = null
+      templatePreviewNodes.value = []
+    } else if (form.template_from_group_id) {
+      void loadTemplatePreview(form.template_from_group_id)
+    }
+  },
+)
 
 marked.setOptions({ gfm: true, breaks: true })
 const renderedPreview = computed(() => {
@@ -243,11 +335,11 @@ function onCoverError() {
   ElMessage.warning('封面图加载失败，请检查链接')
 }
 
-function buildPayload() {
-  const data: any = {
+function buildCreatePayload() {
+  const data: Record<string, unknown> = {
     title: form.title.trim(),
     category: form.category,
-    body_md: form.body_md,
+    body_md: form.body_md.trim(),
     anon: form.anon,
   }
   if (form.course_tag.trim()) data.course_tag = form.course_tag.trim()
@@ -259,7 +351,43 @@ function buildPayload() {
   return data
 }
 
-async function onPublish() {
+function buildUpdatePayload() {
+  const data: Record<string, unknown> = {
+    title: form.title.trim(),
+    category: form.category,
+    body_md: form.body_md.trim(),
+    anon: form.anon,
+  }
+  const course = form.course_tag.trim()
+  data.course_tag = course || null
+  const cover = form.cover_url.trim()
+  data.cover_url = cover || null
+  const link = form.link_url.trim()
+  data.link_url = link || null
+  return data
+}
+
+async function onSave() {
+  if (!formRef.value || !editId.value) return
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
+  busy.publish = true
+  try {
+    const res = await Api.updatePost(editId.value, buildUpdatePayload())
+    ElMessage.success('已保存')
+    router.back()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } finally {
+    busy.publish = false
+  }
+}
+
+async function onPublish(asAnon: boolean) {
+  form.anon = asAnon
   if (!formRef.value) return
   try {
     await formRef.value.validate()
@@ -268,18 +396,9 @@ async function onPublish() {
   }
   busy.publish = true
   try {
-    const data = buildPayload()
-    let id: number
-    if (isEdit.value && editId.value) {
-      const res = await Api.updatePost(editId.value, data)
-      id = res.id
-      ElMessage.success('已保存')
-    } else {
-      const res = await Api.createPost(data)
-      id = res.id
-      ElMessage.success('已发布')
-    }
-    router.replace(`/inspiration/p/${id}`)
+    const res = await Api.createPost(buildCreatePayload())
+    ElMessage.success(asAnon ? '已匿名发布' : '已发布')
+    router.replace(`/inspiration/p/${res.id}`)
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '提交失败')
   } finally {
@@ -287,12 +406,7 @@ async function onPublish() {
   }
 }
 
-function onSaveDraft() {
-  // For now, draft is the same as publish (no draft endpoint in v1.0).
-  void onPublish()
-}
-
-async function onCancel() {
+async function goBack() {
   if (form.title || form.body_md) {
     try {
       await ElMessageBox.confirm('内容尚未保存，确定要离开吗？', '提示', {
@@ -304,10 +418,12 @@ async function onCancel() {
       return
     }
   }
-  if (isEdit.value && editId.value) {
-    router.push(`/inspiration/p/${editId.value}`)
+  if (returnTo.value) {
+    router.replace(returnTo.value)
+  } else if (window.history.length > 1) {
+    router.back()
   } else {
-    router.push('/inspiration')
+    router.replace('/inspiration')
   }
 }
 
@@ -330,73 +446,92 @@ async function loadForEdit() {
 onMounted(async () => {
   if (!groupsStore.loaded) await groupsStore.refresh().catch(() => {})
   if (isEdit.value) await loadForEdit()
+  if (form.category === 'template' && form.template_from_group_id) {
+    await loadTemplatePreview(form.template_from_group_id)
+  }
 })
 </script>
 
+<style lang="scss">
+@use '@/styles/inspiration-pages.scss';
+</style>
+
 <style lang="scss" scoped>
-.edit-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
+.category-segment {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
-.edit-head {
+.body-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.body-label-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: var(--space-3);
+  min-height: 32px;
+  padding-bottom: var(--space-2);
+  font-size: var(--el-form-label-font-size, var(--fs-base));
+  line-height: 32px;
+}
 
-  .title {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
+.body-label-row__text {
+  font-weight: 600;
+  color: var(--text-primary);
+
+  &::before {
+    content: '*';
+    color: var(--el-color-danger);
+    margin-right: 4px;
   }
 }
-.head-actions { display: flex; gap: 8px; }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 16px;
-  align-items: start;
-}
+.body-form-item {
+  margin-bottom: 0;
 
-.form-col { display: flex; flex-direction: column; gap: 16px; }
-.form-card, .body-card { padding: 20px 24px; }
+  :deep(.el-form-item__content) {
+    width: 100%;
+    max-width: 100%;
+  }
 
-.body-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.lbl {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
+  &--no-label :deep(.el-form-item__label-wrap) {
+    display: none;
+  }
 }
 
 .body-area {
+  width: 100%;
   min-height: 480px;
+
+  :deep(.el-textarea),
+  :deep(.insp-capsule-textarea) {
+    width: 100%;
+    display: block;
+  }
+
+  :deep(.el-textarea__inner) {
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 .md-preview {
   min-height: 480px;
-  padding: 12px 16px;
-  border: 1px dashed var(--border-color);
-  border-radius: 8px;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  box-shadow: none;
   background: var(--bg-soft);
 }
 
 .markdown-body {
   line-height: 1.7;
-  font-size: 14px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
 
   :deep(h1), :deep(h2), :deep(h3) {
@@ -404,88 +539,114 @@ onMounted(async () => {
     color: var(--text-primary);
     font-weight: 700;
   }
-  :deep(h1) { font-size: 20px; }
-  :deep(h2) { font-size: 17px; }
-  :deep(h3) { font-size: 15px; }
+  :deep(h1) { font-size: var(--fs-xl); }
+  :deep(h2) { font-size: var(--fs-lg); }
+  :deep(h3) { font-size: var(--fs-md); }
   :deep(p)  { margin: 0.6em 0; }
   :deep(a)  { color: var(--color-primary); }
   :deep(ul), :deep(ol) { padding-left: 1.4em; }
   :deep(code) {
     background: var(--bg-card);
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 1px var(--space-1);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
     color: var(--color-danger);
   }
   :deep(pre) {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    padding: 12px;
-    border-radius: 6px;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
     overflow-x: auto;
   }
   :deep(blockquote) {
     border-left: 3px solid var(--color-primary);
-    padding-left: 10px;
+    padding-left: var(--space-3);
     color: var(--text-secondary);
     margin: 0.8em 0;
   }
-  :deep(img) { max-width: 100%; border-radius: 6px; }
+  :deep(img) { max-width: 100%; border-radius: var(--radius-md); }
 }
 
 .cover-preview {
-  margin-top: 8px;
-  border-radius: 6px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   max-width: 280px;
   background: var(--bg-soft);
   img { width: 100%; display: block; max-height: 160px; object-fit: cover; }
 }
 
-.tips-col {
-  position: sticky;
-  top: 0;
+.template-source {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
-.tips-card { padding: 16px 18px; }
-.side-title {
-  font-size: 14px;
+
+.template-source__hint {
+  margin: var(--space-2) 0 0;
+}
+
+.template-preview-inset {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  min-height: 48px;
+}
+
+.template-preview__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.template-preview__label {
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 10px;
+  color: var(--text-secondary);
 }
+
+.template-preview__stats {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.template-preview__tree-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.template-preview__empty {
+  margin: 0;
+}
+
 .tips {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
+
   li {
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
     line-height: 1.5;
-    padding-left: 16px;
+    padding-left: var(--space-4);
     position: relative;
+
     &::before {
       content: '•';
       position: absolute;
-      left: 4px;
+      left: var(--space-1);
       color: var(--color-primary);
       font-weight: 700;
     }
+
     b { color: var(--text-primary); font-weight: 600; }
   }
-}
-
-.mt-4 { margin-top: 4px; }
-
-@media (max-width: 992px) {
-  .form-grid { grid-template-columns: 1fr; }
-  .tips-col { position: static; }
-}
-@media (max-width: 768px) {
-  .edit-head { flex-direction: column; align-items: stretch; }
-  .head-actions { justify-content: flex-end; }
-  .form-card, .body-card { padding: 14px; }
 }
 </style>

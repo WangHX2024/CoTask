@@ -1,25 +1,31 @@
 <template>
-  <div class="groups-page">
-    <!-- Header strip -->
-    <div class="header-strip">
-      <h1 class="page-title">我的小组</h1>
-      <div class="header-actions">
-        <el-button type="primary" @click="showCreate = true">
-          <span class="btn-icon">+</span>&nbsp;新建小组
-        </el-button>
-        <el-button type="warning" @click="showJoin = true">
-          <span class="btn-icon">🔑</span>&nbsp;加入小组
-        </el-button>
+  <div class="groups-page page insp-sub-page">
+    <header class="insp-page-header">
+      <div class="insp-page-header__lead">
+        <div class="page-header-text">
+          <h1 class="page-title">我的小组</h1>
+          <p class="page-desc">管理和切换你参与的课程小组</p>
+        </div>
       </div>
-    </div>
+      <div class="insp-page-actions">
+        <button type="button" class="insp-capsule-btn" @click="showJoin = true">
+          <el-icon><Key /></el-icon>
+          <span>加入小组</span>
+        </button>
+        <button type="button" class="insp-capsule-btn insp-capsule-btn--primary" @click="showCreate = true">
+          <el-icon><Plus /></el-icon>
+          <span>新建小组</span>
+        </button>
+      </div>
+    </header>
 
     <!-- Filter tabs -->
     <div class="filter-bar">
-      <el-radio-group v-model="filter" size="default">
-        <el-radio-button label="all">全部</el-radio-button>
-        <el-radio-button label="leader">我是组长</el-radio-button>
-        <el-radio-button label="member">我是组员</el-radio-button>
-      </el-radio-group>
+      <SegmentedControl
+        v-model="filter"
+        size="md"
+        :options="groupFilterOptions"
+      />
     </div>
 
     <!-- Loading -->
@@ -36,12 +42,18 @@
         description="还没有小组，新建一个或加入一个吧"
       >
         <div class="empty-actions">
-          <el-button type="primary" @click="showCreate = true">
-            + 新建小组
-          </el-button>
-          <el-button type="warning" @click="showJoin = true">
-            🔑 加入小组
-          </el-button>
+          <button
+            type="button"
+            class="insp-capsule-btn insp-capsule-btn--primary"
+            @click="showCreate = true"
+          >
+            <el-icon><Plus /></el-icon>
+            <span>新建小组</span>
+          </button>
+          <button type="button" class="insp-capsule-btn" @click="showJoin = true">
+            <el-icon><Key /></el-icon>
+            <span>加入小组</span>
+          </button>
         </div>
       </el-empty>
     </template>
@@ -55,7 +67,7 @@
       >
         <div
           class="color-stripe"
-          :style="{ background: stripeColor(g.course_name) }"
+          :style="{ '--stripe': stripeColor(g.course_name) }"
         ></div>
 
         <div class="card-body">
@@ -65,21 +77,21 @@
               <div class="group-name">{{ g.name }}</div>
             </div>
             <span
-              class="role-badge"
-              :class="g.role === 'leader' ? 'role-leader' : 'role-member'"
+              class="insp-tag"
+              :class="g.role === 'leader' ? 'insp-tag--leader' : 'insp-tag--member'"
             >
               {{ g.role === 'leader' ? '组长' : '组员' }}
             </span>
           </div>
 
-          <p v-if="g.description" class="desc">{{ g.description }}</p>
+          <div class="desc-slot">
+            <p v-if="g.description" class="desc">{{ g.description }}</p>
+          </div>
 
-          <!-- Member avatars -->
           <div class="member-stack">
             <MemberAvatars :group-id="g.id" :count="g.member_count" />
           </div>
 
-          <!-- Progress -->
           <div class="progress-block">
             <el-progress
               :percentage="Math.round(g.progress || 0)"
@@ -93,29 +105,36 @@
             </div>
           </div>
 
-          <!-- Invite code (leader + active) -->
           <div
-            v-if="g.role === 'leader' && g.status === 'active' && g.invite_code"
-            class="invite-row"
-            @click.stop="copyCode(g.invite_code!)"
+            class="invite-slot"
+            :class="{ 'invite-slot--has': g.role === 'leader' && g.status === 'active' && g.invite_code }"
           >
-            <span class="invite-label">邀请码</span>
-            <code class="invite-code">{{ g.invite_code }}</code>
-            <el-icon class="copy-icon"><CopyDocument /></el-icon>
+            <div
+              v-if="g.role === 'leader' && g.status === 'active' && g.invite_code"
+              class="invite-row"
+              @click.stop="openInviteDialog(g)"
+            >
+              <span class="invite-label">邀请码</span>
+              <code class="invite-code">{{ g.invite_code }}</code>
+              <el-icon class="copy-icon"><CopyDocument /></el-icon>
+            </div>
           </div>
 
-          <!-- Hover actions -->
-          <div class="hover-actions">
-            <el-button size="small" type="primary" @click="enterGroup(g)">
+          <div class="card-actions">
+            <button
+              type="button"
+              class="insp-capsule-btn insp-capsule-btn--primary"
+              @click="enterGroup(g)"
+            >
               进入
-            </el-button>
-            <el-button size="small" @click="manageMembers(g)">
+            </button>
+            <button type="button" class="insp-capsule-btn" @click="manageMembers(g)">
               成员管理
-            </el-button>
+            </button>
             <el-dropdown trigger="click" @command="(c: string) => onDropdown(c, g)">
-              <el-button size="small" circle>
+              <button type="button" class="insp-capsule-btn insp-capsule-btn--icon">
                 <el-icon><MoreFilled /></el-icon>
-              </el-button>
+              </button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item
@@ -125,7 +144,6 @@
                   <el-dropdown-item
                     v-if="g.role === 'leader'"
                     command="dissolve"
-                    divided
                   >
                     <span class="danger-text">解散小组</span>
                   </el-dropdown-item>
@@ -140,6 +158,7 @@
     <!-- Create dialog -->
     <el-dialog
       v-model="showCreate"
+      class="sub-page-dialog"
       title="新建小组"
       width="480px"
       :close-on-click-modal="false"
@@ -153,6 +172,7 @@
         <el-form-item label="课程名" prop="course_name">
           <el-input
             v-model="createForm.course_name"
+            class="insp-capsule-input"
             placeholder="如：软件工程"
             maxlength="40"
             show-word-limit
@@ -161,6 +181,7 @@
         <el-form-item label="小组名" prop="name">
           <el-input
             v-model="createForm.name"
+            class="insp-capsule-input"
             placeholder="给小组起个名字"
             maxlength="40"
             show-word-limit
@@ -169,6 +190,7 @@
         <el-form-item label="描述">
           <el-input
             v-model="createForm.description"
+            class="insp-capsule-textarea"
             type="textarea"
             :rows="3"
             placeholder="小组介绍（选填）"
@@ -178,16 +200,24 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreate = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="onCreate">
-          创建
-        </el-button>
+        <div class="dialog-footer-actions">
+          <button type="button" class="insp-capsule-btn" @click="showCreate = false">取消</button>
+          <button
+            type="button"
+            class="insp-capsule-btn insp-capsule-btn--primary"
+            :disabled="creating"
+            @click="onCreate"
+          >
+            {{ creating ? '创建中…' : '创建' }}
+          </button>
+        </div>
       </template>
     </el-dialog>
 
     <!-- Join dialog -->
     <el-dialog
       v-model="showJoin"
+      class="sub-page-dialog"
       title="加入小组"
       width="420px"
       :close-on-click-modal="false"
@@ -201,19 +231,64 @@
         <el-form-item label="邀请码" prop="invite_code">
           <el-input
             v-model="joinForm.invite_code"
-            placeholder="8 位邀请码"
+            class="insp-capsule-input invite-input"
+            placeholder="邀请码（8位）"
             maxlength="8"
-            class="invite-input"
             @input="onInviteInput"
           />
         </el-form-item>
         <div class="hint tiny muted">向组长索取邀请码后填入</div>
       </el-form>
       <template #footer>
-        <el-button @click="showJoin = false">取消</el-button>
-        <el-button type="primary" :loading="joining" @click="onJoin">
-          加入
-        </el-button>
+        <div class="dialog-footer-actions">
+          <button type="button" class="insp-capsule-btn" @click="showJoin = false">取消</button>
+          <button
+            type="button"
+            class="insp-capsule-btn insp-capsule-btn--primary"
+            :disabled="joining"
+            @click="onJoin"
+          >
+            {{ joining ? '加入中…' : '加入' }}
+          </button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="showInviteShare"
+      class="sub-page-dialog invite-share-dialog"
+      width="min(480px, 92vw)"
+      :close-on-click-modal="true"
+    >
+      <template #header>
+        <div class="invite-share__head">
+          <el-icon class="invite-share__icon"><Share /></el-icon>
+          <div>
+            <div class="invite-share__title">邀请成员</div>
+            <div class="muted tiny">{{ inviteTarget?.course_name }} · {{ inviteTarget?.name }}</div>
+          </div>
+        </div>
+      </template>
+
+      <p class="invite-share__pitch">{{ invitePitchText }}</p>
+
+      <div class="invite-share__code">
+        <span class="invite-share__code-label">邀请码</span>
+        <code class="invite-share__code-value">{{ inviteTarget?.invite_code }}</code>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer-actions">
+          <button type="button" class="insp-capsule-btn" @click="showInviteShare = false">关闭</button>
+          <button type="button" class="insp-capsule-btn" @click="copyInvitePitch">复制话术</button>
+          <button
+            type="button"
+            class="insp-capsule-btn insp-capsule-btn--primary"
+            @click="copyInviteCodeFromDialog"
+          >
+            复制邀请码
+          </button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -224,9 +299,17 @@ import { computed, onMounted, ref, h, defineComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { CopyDocument, MoreFilled } from '@element-plus/icons-vue'
+import { CopyDocument, MoreFilled, Key, Plus, Share } from '@element-plus/icons-vue'
 import { Api, type GroupBrief, type MemberInfo } from '@/api'
 import { useGroupsStore } from '@/stores/groups'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import { buildGroupInvitePitch } from '@/utils/groupInvitePitch'
+
+const groupFilterOptions = [
+  { label: '全部', value: 'all' as const },
+  { label: '我是组长', value: 'leader' as const },
+  { label: '我是组员', value: 'member' as const },
+]
 
 const router = useRouter()
 const groupsStore = useGroupsStore()
@@ -237,6 +320,24 @@ const filter = ref<'all' | 'leader' | 'member'>('all')
 
 const showCreate = ref(false)
 const showJoin = ref(false)
+const inviteTarget = ref<GroupBrief | null>(null)
+
+const showInviteShare = computed({
+  get: () => inviteTarget.value !== null,
+  set: (open: boolean) => {
+    if (!open) inviteTarget.value = null
+  },
+})
+
+const inviteSiteUrl = computed(() =>
+  typeof window !== 'undefined' ? window.location.origin : '',
+)
+
+const invitePitchText = computed(() => {
+  const g = inviteTarget.value
+  if (!g) return ''
+  return buildGroupInvitePitch(g, inviteSiteUrl.value)
+})
 const creating = ref(false)
 const joining = ref(false)
 
@@ -334,13 +435,29 @@ function manageMembers(g: GroupBrief) {
   router.push(`/groups/${g.id}/members`)
 }
 
-async function copyCode(code: string) {
+function openInviteDialog(g: GroupBrief) {
+  if (g.role !== 'leader' || g.status !== 'active' || !g.invite_code) return
+  inviteTarget.value = g
+}
+
+async function copyText(text: string, okMsg: string) {
   try {
-    await navigator.clipboard.writeText(code)
-    ElMessage.success('邀请码已复制')
+    await navigator.clipboard.writeText(text)
+    ElMessage.success(okMsg)
   } catch {
     ElMessage.warning('复制失败，请手动复制')
   }
+}
+
+async function copyInvitePitch() {
+  if (!invitePitchText.value) return
+  await copyText(invitePitchText.value, '邀请话术已复制')
+}
+
+async function copyInviteCodeFromDialog() {
+  const code = inviteTarget.value?.invite_code
+  if (!code) return
+  await copyText(code, '邀请码已复制')
 }
 
 function onDropdown(cmd: string, g: GroupBrief) {
@@ -403,8 +520,7 @@ function hashStr(s: string) {
   return Math.abs(h)
 }
 function stripeColor(name: string) {
-  const c = palette[hashStr(name || '?') % palette.length]
-  return `linear-gradient(90deg, ${c}, ${c}aa)`
+  return palette[hashStr(name || '?') % palette.length]
 }
 function progressColor(p: number) {
   if (p >= 80) return '#67C23A'
@@ -452,35 +568,11 @@ const MemberAvatars = defineComponent({
 })
 </script>
 
+<style lang="scss">
+@use '@/styles/inspiration-pages.scss';
+</style>
+
 <style lang="scss" scoped>
-.groups-page {
-  max-width: 1280px;
-  margin: 0 auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.header-strip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.page-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-.btn-icon { font-weight: 700; }
-
 .filter-bar {
   display: flex;
   justify-content: flex-start;
@@ -488,111 +580,147 @@ const MemberAvatars = defineComponent({
 
 .empty-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: center;
+  flex-wrap: wrap;
 }
 
-.grid-skeleton {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+.dialog-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
+.grid-skeleton,
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-6);
+  align-items: stretch;
+}
+
+.grid-skeleton :deep(.el-skeleton) {
+  padding: var(--space-6);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
 }
 
 .group-card {
   background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  position: relative;
-  min-height: 280px;
-  transition: transform .15s ease, box-shadow .15s ease;
+  height: 100%;
+  box-shadow: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
-
-    .hover-actions { opacity: 1; transform: translateY(0); }
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
   }
 }
 
 .color-stripe {
-  height: 6px;
+  --stripe: var(--color-primary);
+  height: 5px;
   width: 100%;
+  flex-shrink: 0;
+  background: linear-gradient(
+    90deg,
+    var(--stripe) 0%,
+    color-mix(in srgb, var(--stripe) 55%, transparent) 55%,
+    transparent 100%
+  );
+  opacity: 0.92;
 }
 
 .card-body {
-  padding: 14px 16px 16px;
+  padding: var(--space-5);
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1;
+  gap: var(--space-2);
+  min-height: 0;
 }
 
+/* Head: course + group name + role badge */
 .card-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-}
-.head-titles { min-width: 0; flex: 1; }
-.course-name {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.group-name {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.3;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  gap: var(--space-2);
 }
 
-.role-badge {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
+.head-titles {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.course-name,
+.group-name,
+.desc {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.role-leader {
-  background: rgba(230,162,60,0.16);
-  color: #B45309;
+
+.course-name {
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  min-height: calc(var(--fs-sm) * 1.35);
+  color: var(--text-tertiary);
 }
-.role-member {
-  background: rgba(61,126,255,0.14);
-  color: #1D4ED8;
+
+.group-name {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  line-height: 1.3;
+  min-height: calc(var(--fs-lg) * 1.3);
+  color: var(--text-primary);
+}
+
+.desc-slot {
+  min-height: calc(var(--fs-xs) * 1.35);
+  display: flex;
+  align-items: center;
 }
 
 .desc {
-  margin: 0;
-  font-size: 12.5px;
+  width: 100%;
+  font-size: var(--fs-xs);
+  line-height: 1.35;
   color: var(--text-secondary);
-  line-height: 1.5;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 
+.member-stack {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.invite-slot {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+
+  &--has {
+    min-height: 32px;
+  }
+}
+
+/* Avatar stack (overlapping circles) */
 :deep(.avatar-stack) {
   display: flex;
   align-items: center;
+
   .av {
     width: 28px;
     height: 28px;
@@ -604,26 +732,28 @@ const MemberAvatars = defineComponent({
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: var(--text-secondary);
 
     &:first-child { margin-left: 0; }
     img { width: 100%; height: 100%; object-fit: cover; }
   }
+
   .av-more {
     background: var(--bg-soft);
     color: var(--text-tertiary);
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 }
 
+/* Progress block */
 .progress-block {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: auto;
+  gap: var(--space-1);
 }
+
 .stats-row {
   display: flex;
   justify-content: space-between;
@@ -632,62 +762,116 @@ const MemberAvatars = defineComponent({
 .invite-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
+  align-self: flex-start;
   background: var(--bg-soft);
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
   cursor: pointer;
-  transition: background .12s;
-  &:hover { background: var(--bg-page); }
+  transition: background 120ms ease, border-color 120ms ease;
 
-  .invite-label {
-    font-size: 11px;
-    color: var(--text-tertiary);
+  &:hover {
+    background: var(--color-primary-light);
+    border-color: transparent;
   }
+
+  .invite-label { font-size: var(--fs-xs); color: var(--text-tertiary); }
+
   .invite-code {
-    font-family: SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--fs-base);
     font-weight: 700;
     color: var(--text-primary);
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
   }
-  .copy-icon {
-    font-size: 13px;
-    color: var(--color-primary);
-  }
+
+  .copy-icon { font-size: var(--fs-base); color: var(--color-primary); }
 }
 
-.hover-actions {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
+.card-actions {
   display: flex;
-  gap: 6px;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity .15s, transform .15s;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
 }
+
+.invite-share__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.invite-share__icon {
+  font-size: 22px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.invite-share__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.invite-share__pitch {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-base);
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-line;
+}
+
+.invite-share__code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+}
+
+.invite-share__code-label {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.invite-share__code-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--color-primary);
+}
+
 .danger-text { color: var(--color-danger); }
 
+/* Join dialog: monospace big code input */
 .invite-input :deep(input) {
-  font-family: SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 4px;
   font-size: 18px;
   text-align: center;
   font-weight: 700;
 }
 
-.hint { margin-top: -8px; }
+.hint { color: var(--text-tertiary); }
 
+/* Responsive */
 @media (max-width: 640px) {
-  .header-strip { flex-direction: column; align-items: flex-start; }
   .cards-grid { grid-template-columns: 1fr; }
-  .hover-actions {
-    position: static;
-    opacity: 1;
-    transform: none;
-    margin-top: 8px;
-  }
 }
 </style>

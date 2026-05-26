@@ -2,9 +2,13 @@
 
 > 完整可部署的全栈实现。包含 Vue 3 前端 + Flask 后端 + MySQL/Redis/MinIO + Celery + Nginx，docker compose 一键拉起。
 
-详细产品方案见 [`docs/开发方案.md`](docs/开发方案.md)。
+详细产品方案见 [`docs/开发方案.md`](docs/开发方案.md)。前端视觉规范见 [`docs/frontend-design-spec.md`](docs/frontend-design-spec.md)。
 
 ## 快速开始
+
+### 生产模式
+
+前端静态构建后由 Nginx 托管，适合体验完整功能或部署上线。
 
 ```bash
 git clone <repo> cotask
@@ -15,14 +19,31 @@ make migrate                     # 应用数据库迁移
 make seed                        # （可选）写入演示数据
 ```
 
-访问：
+| 入口         | 地址                   |
+| ------------ | ---------------------- |
+| 前端         | http://localhost       |
+| API          | http://localhost/api   |
+| OpenAPI 文档 | http://localhost/docs  |
+| MinIO 控制台 | http://localhost:9001  |
 
-| 入口          | 地址                        |
-| ------------- | --------------------------- |
-| 前端          | http://localhost            |
-| API           | http://localhost/api        |
-| OpenAPI 文档  | http://localhost/docs       |
-| MinIO 控制台  | http://localhost:9001       |
+### 开发模式（含前端热更新 HMR）
+
+前端以 Vite dev server 运行，修改 `.vue` / `.ts` 文件后浏览器**自动热更新**，无需重新构建镜像。
+
+```bash
+make dev                         # 拉起所有服务（首次会构建 dev 镜像）
+make migrate                     # 首次需要执行一次迁移
+make seed                        # （可选）写入演示数据
+```
+
+| 入口                | 地址                            | 说明                          |
+| ------------------- | ------------------------------- | ----------------------------- |
+| 前端（推荐）        | http://localhost:5173           | 直连 Vite dev server，HMR 最快 |
+| 前端（Nginx 代理）  | http://localhost                | 经 Nginx 转发，HMR 同样有效   |
+| API                 | http://localhost:5173/api       | 由 Vite 代理至 api 容器       |
+| MinIO 控制台        | http://localhost:9001           |                               |
+
+> **WSL2 说明**：开发模式已启用文件系统轮询（`CHOKIDAR_USEPOLLING=true`），WSL2 + Docker 下文件监听完全正常。
 
 演示账号（执行 `make seed` 后可用）：
 - 组长：`13800000001` / `password123`
@@ -32,8 +53,11 @@ make seed                        # （可选）写入演示数据
 
 ```
 .
-├── docker-compose.yml      # 7 个服务：nginx, web, api, worker, beat, mysql, redis, minio
-├── nginx/                  # 反向代理配置
+├── docker-compose.yml      # 生产：7 个服务（nginx, web, api, worker, beat, mysql, redis, minio）
+├── docker-compose.dev.yml  # 开发覆盖：web 改为 Vite dev server + source volume mount
+├── nginx/
+│   ├── nginx.conf          # 生产 Nginx 配置
+│   └── nginx.dev.conf      # 开发 Nginx 配置（代理至 Vite，含 HMR WebSocket 支持）
 ├── backend/                # Flask + Celery
 │   ├── app/
 │   │   ├── modules/        # 业务模块（auth/users/groups/tree/tasks/...）
@@ -43,24 +67,38 @@ make seed                        # （可选）写入演示数据
 │   ├── migrations/         # Alembic
 │   └── tests/
 ├── frontend/               # Vue 3 + Vite + TS + Pinia + Element Plus
+│   ├── Dockerfile          # 生产镜像（多阶段：build → nginx:alpine）
+│   ├── Dockerfile.dev      # 开发镜像（node:20-alpine，运行 npm run dev）
 │   └── src/
 │       ├── views/          # 页面
 │       ├── components/     # 组件
 │       ├── stores/         # Pinia
-│       ├── api/            # 自动生成的 OpenAPI 客户端 + 手写 fetch 包装
+│       ├── api/            # 类型化 API 客户端
 │       └── router/
 ├── scripts/                # seed、ops 工具
-└── docs/开发方案.md        # 单一参考文档
+└── docs/
+    ├── 开发方案.md          # 产品与架构参考文档
+    └── frontend-design-spec.md  # 前端视觉风格规范
 ```
 
 ## 常用命令
 
-见 `make help`。
+```bash
+make help       # 查看所有命令
+make up         # 生产模式启动
+make dev        # 开发模式启动（前端 HMR）
+make down       # 停止所有服务
+make migrate    # 应用数据库迁移
+make seed       # 写入演示数据
+make logs       # 跟随日志输出
+make shell-api  # 进入 api 容器
+make test       # 后端 pytest
+```
 
 ## 测试
 
 ```bash
-make test                  # 后端 pytest
+make test                    # 后端 pytest
 cd frontend && npm run test  # 前端 vitest
 ```
 

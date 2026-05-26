@@ -1,17 +1,26 @@
 <template>
-  <div class="detail-page">
+  <div class="detail-page insp-sub-page page">
     <template v-if="loading && !post">
-      <div class="card detail-skel">
+      <div class="insp-panel detail-skel">
         <el-skeleton animated :rows="10" />
       </div>
     </template>
 
     <template v-else-if="post">
-      <!-- Header -->
+      <button
+        type="button"
+        class="insp-capsule-btn insp-back-btn"
+        aria-label="返回灵感广场"
+        @click="goBack"
+      >
+        <el-icon><ArrowLeft /></el-icon>
+        <span>返回</span>
+      </button>
+
       <header class="detail-head">
         <div class="head-meta">
-          <span class="cat-tag" :class="`cat-${post.category}`">{{ categoryLabel(post.category) }}</span>
-          <span v-if="post.course_tag" class="course-tag">#{{ post.course_tag }}</span>
+          <span class="insp-tag" :class="`cat-${post.category}`">{{ categoryLabel(post.category) }}</span>
+          <span v-if="post.course_tag" class="insp-tag insp-tag--course">#{{ post.course_tag }}</span>
         </div>
         <h1 class="detail-title">{{ post.title }}</h1>
         <div class="author-row">
@@ -28,64 +37,100 @@
         </div>
       </header>
 
-      <!-- Action bar -->
-      <div class="action-bar card">
-        <div class="actions-left">
-          <el-button
-            :type="post.liked_by_me ? 'primary' : 'default'"
-            :plain="!post.liked_by_me"
-            @click="toggleLike"
-            :loading="busy.like"
-          >
-            <el-icon><Star /></el-icon>&nbsp;
-            {{ post.liked_by_me ? '已点赞' : '点赞' }}
-            <span class="cnt">{{ post.likes }}</span>
-          </el-button>
-          <el-button
-            :type="post.favored_by_me ? 'warning' : 'default'"
-            :plain="!post.favored_by_me"
-            @click="toggleFav"
-            :loading="busy.fav"
-          >
-            <el-icon><Collection /></el-icon>&nbsp;
-            {{ post.favored_by_me ? '已收藏' : '收藏' }}
-            <span class="cnt">{{ post.favs }}</span>
-          </el-button>
-          <el-button @click="scrollToComments">
-            <el-icon><ChatDotRound /></el-icon>&nbsp;评论
-            <span class="cnt">{{ post.comments }}</span>
-          </el-button>
-        </div>
-        <div class="actions-right">
-          <el-button @click="copyLink">
-            <el-icon><CopyDocument /></el-icon>&nbsp;复制链接
-          </el-button>
-          <el-dropdown @command="onMoreCmd" trigger="click">
-            <el-button>
-              <el-icon><More /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="report">
-                  <el-icon><Warning /></el-icon> 举报
-                </el-dropdown-item>
-                <el-dropdown-item v-if="isAuthor" divided command="edit">
-                  <el-icon><Edit /></el-icon> 编辑
-                </el-dropdown-item>
-                <el-dropdown-item v-if="isAuthor" command="delete">
-                  <el-icon><Delete /></el-icon> 删除
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </div>
+      <div
+        class="insp-main-grid"
+        :class="{ 'insp-main-grid--full': !showSidebar }"
+      >
+        <article class="insp-main-col">
+          <div class="insp-action-strip">
+            <div class="insp-action-strip__left">
+              <button
+                type="button"
+                class="insp-capsule-btn"
+                :class="{ active: post.liked_by_me }"
+                :disabled="busy.like"
+                @click="toggleLike"
+              >
+                <el-icon><ThumbUpIcon :filled="post.liked_by_me" /></el-icon>
+                {{ post.liked_by_me ? '已点赞' : '点赞' }}
+                <span class="cnt">{{ post.likes }}</span>
+              </button>
+              <button
+                type="button"
+                class="insp-capsule-btn"
+                :class="{ active: post.favored_by_me, 'insp-capsule-btn--warn': post.favored_by_me }"
+                :disabled="busy.fav"
+                @click="toggleFav"
+              >
+                <el-icon>
+                  <StarFilled v-if="post.favored_by_me" />
+                  <Star v-else />
+                </el-icon>
+                {{ post.favored_by_me ? '已收藏' : '收藏' }}
+                <span class="cnt">{{ post.favs }}</span>
+              </button>
+              <button type="button" class="insp-capsule-btn" @click="scrollToComments">
+                <el-icon><ChatDotRound /></el-icon>
+                评论
+                <span class="cnt">{{ post.comments }}</span>
+              </button>
+            </div>
+            <div class="insp-action-strip__right">
+              <button type="button" class="insp-capsule-btn" @click="copyLink">
+                <el-icon><CopyDocument /></el-icon>
+                复制链接
+              </button>
+              <el-dropdown trigger="click" @command="onMoreCmd">
+                <button type="button" class="insp-capsule-btn">
+                  <el-icon><More /></el-icon>
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="report">
+                      <el-icon><Warning /></el-icon> 举报
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="isAuthor" divided command="edit">
+                      <el-icon><Edit /></el-icon> 编辑
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="isAuthor" command="delete">
+                      <el-icon><Delete /></el-icon> 删除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
 
-      <!-- Main layout -->
-      <div class="main-grid">
-        <!-- Body -->
-        <article class="body-col">
-          <div class="card body-card">
+          <div
+            v-if="post.has_template"
+            class="insp-panel structure-card"
+            v-loading="templateLoading"
+          >
+            <h2 class="section-title">项目结构</h2>
+            <div class="template-preview__bar">
+              <span class="template-preview__label">模板结构预览</span>
+              <span v-if="templateStructureStats" class="template-preview__stats muted tiny">
+                {{ templateStructureStats }}
+              </span>
+            </div>
+            <div v-if="templateNodes.length" class="structure-card__tree">
+              <TemplatePreviewTree :nodes="templateNodes" />
+            </div>
+            <p v-else-if="!templateLoading" class="muted tiny template-preview__empty">
+              该模板暂无任务节点
+            </p>
+            <div class="structure-card__actions">
+              <button
+                type="button"
+                class="insp-capsule-btn insp-capsule-btn--primary"
+                @click="openImportDialog"
+              >
+                导入到我的小组
+              </button>
+            </div>
+          </div>
+
+          <div class="insp-panel body-card">
             <div
               class="markdown-body"
               v-html="renderedBody"
@@ -94,29 +139,38 @@
           </div>
 
           <!-- Comments -->
-          <div ref="commentsEl" class="card comments-card">
+          <div ref="commentsEl" class="insp-panel comments-card">
             <h2 class="section-title">
               <el-icon><ChatDotRound /></el-icon>&nbsp;评论 ({{ post.comments }})
             </h2>
 
-            <!-- Composer -->
             <div class="composer">
               <el-input
                 v-model="newComment.body"
+                class="insp-capsule-textarea"
                 type="textarea"
                 :rows="3"
                 placeholder="留下你的想法…"
                 maxlength="1000"
                 show-word-limit
               />
-              <div class="composer-actions">
-                <el-checkbox v-model="newComment.anon">匿名发表</el-checkbox>
-                <el-button
-                  type="primary"
-                  :disabled="!newComment.body.trim()"
-                  :loading="busy.comment"
-                  @click="submitComment()"
-                >发表</el-button>
+              <div class="insp-comment-actions">
+                <button
+                  type="button"
+                  class="insp-capsule-btn"
+                  :disabled="!newComment.body.trim() || busy.comment"
+                  @click="submitComment(true)"
+                >
+                  {{ busy.comment ? '提交中…' : '匿名发表' }}
+                </button>
+                <button
+                  type="button"
+                  class="insp-capsule-btn insp-capsule-btn--primary"
+                  :disabled="!newComment.body.trim() || busy.comment"
+                  @click="submitComment(false)"
+                >
+                  {{ busy.comment ? '提交中…' : '发表' }}
+                </button>
               </div>
             </div>
 
@@ -144,16 +198,14 @@
           </div>
         </article>
 
-        <!-- Sidebar -->
-        <aside class="side-col">
-          <!-- TOC -->
-          <div v-if="toc.length" class="card toc-card">
-            <div class="side-title">目录</div>
+        <aside v-if="showSidebar" class="insp-side-col">
+          <div v-if="toc.length" class="toc-block">
+            <div class="toc-block__title">目录</div>
             <ul class="toc">
               <li
                 v-for="(h, i) in toc"
                 :key="i"
-                :class="['toc-item', `level-${h.level}`]"
+                :class="['list-row', 'toc-item', `level-${h.level}`]"
                 @click="scrollToHeading(h.id)"
               >
                 {{ h.text }}
@@ -161,72 +213,37 @@
             </ul>
           </div>
 
-          <!-- Import card -->
-          <div v-if="post.has_template" class="card import-card">
-            <div class="import-head">
-              <el-icon class="import-icon"><DocumentCopy /></el-icon>
-              <div>
-                <div class="side-title" style="margin-bottom: 2px;">导入到我的小组</div>
-                <div class="muted tiny">复用这个项目结构，几秒钟开始</div>
-              </div>
-            </div>
-            <div class="import-body">
-              <label class="lbl">选择小组</label>
-              <el-select
-                v-model="importGid"
-                placeholder="选择一个你管理的小组"
-                size="default"
-                style="width: 100%;"
-                :disabled="!leaderGroups.length"
-              >
-                <el-option
-                  v-for="g in leaderGroups"
-                  :key="g.id"
-                  :value="g.id"
-                  :label="`[${g.course_name}] ${g.name}`"
-                />
-              </el-select>
-              <div v-if="!leaderGroups.length" class="muted tiny mt-4">
-                你目前不是任何小组的组长。
-              </div>
-
-              <label class="lbl mt-12">导入模式</label>
-              <el-radio-group v-model="importMode">
-                <el-radio value="replace">替换</el-radio>
-                <el-radio value="append">追加</el-radio>
-              </el-radio-group>
-
-              <el-button
-                type="primary"
-                style="width: 100%; margin-top: 12px;"
-                :disabled="!importGid"
-                :loading="busy.import"
-                @click="confirmImport"
-              >
-                确认导入
-              </el-button>
-            </div>
-          </div>
         </aside>
       </div>
     </template>
+
+    <TemplateImportDialog
+      v-if="post?.has_template"
+      v-model="importDialogOpen"
+      :post-id="postId"
+      :template-nodes="templateNodes"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Star, Collection, ChatDotRound, CopyDocument, More,
-  Warning, Edit, Delete, DocumentCopy,
+  ArrowLeft, Star, StarFilled, ChatDotRound, CopyDocument, More,
+  Warning, Edit, Delete,
 } from '@element-plus/icons-vue'
+import ThumbUpIcon from '@/components/common/ThumbUpIcon.vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import dayjs from 'dayjs'
-import { Api, type Comment, type PostDetail } from '@/api'
+import { Api, type Comment, type PostDetail, type TaskNode } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
+import TemplatePreviewTree from '@/components/inspiration/TemplatePreviewTree.vue'
+import TemplateImportDialog from '@/components/inspiration/TemplateImportDialog.vue'
+import { previewTreeStats } from '@/components/inspiration/templatePreviewTree'
 import CommentItem from './_InspirationCommentItem.vue'
 
 const route = useRoute()
@@ -247,23 +264,42 @@ const busy = reactive({
   fav: false,
   comment: false,
   reply: false,
-  import: false,
 })
 
-const newComment = reactive({ body: '', anon: false })
+const newComment = reactive({ body: '' })
 const replyTargetId = ref<number | null>(null)
 const replyText = ref('')
 
-const importGid = ref<number>(0)
-const importMode = ref<'replace' | 'append'>('replace')
+const importDialogOpen = ref(false)
+const templateLoading = ref(false)
+const templateNodes = ref<TaskNode[]>([])
+
+const templateStructureStats = computed(() => previewTreeStats(templateNodes.value))
+
+const returnTo = computed(() => {
+  const q = route.query.returnTo
+  if (typeof q === 'string' && q.startsWith('/')) return q
+  return '/inspiration'
+})
+
+function goBack() {
+  router.replace(returnTo.value)
+}
 
 const isAuthor = computed(
-  () => !!(post.value && auth.user && post.value.author_id === auth.user.id),
+  () =>
+    !!(
+      post.value
+      && auth.user
+      && (post.value.is_author ?? post.value.author_id === auth.user.id)
+    ),
 )
 
 const leaderGroups = computed(() =>
   groupsStore.list.filter((g) => g.role === 'leader'),
 )
+
+const showSidebar = computed(() => toc.value.length > 0)
 
 interface TocEntry { id: string; text: string; level: number }
 const toc = ref<TocEntry[]>([])
@@ -307,11 +343,41 @@ function injectHeadingIds(html: string): string {
   return result
 }
 
+async function syncTemplateNodes() {
+  templateNodes.value = []
+  if (!post.value?.has_template) return
+
+  const embedded = post.value.template_nodes
+  if (embedded && embedded.length > 0) {
+    templateNodes.value = embedded
+    return
+  }
+
+  templateLoading.value = true
+  try {
+    const res = await Api.templateNodes(postId.value)
+    templateNodes.value = res.nodes
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '加载模板结构失败')
+  } finally {
+    templateLoading.value = false
+  }
+}
+
+function openImportDialog() {
+  if (!leaderGroups.value.length) {
+    ElMessage.warning('你目前不是任何小组的组长，无法导入模板')
+    return
+  }
+  importDialogOpen.value = true
+}
+
 async function loadPost() {
   loading.value = true
   try {
     post.value = await Api.post(postId.value)
     comments.value = await Api.comments(postId.value)
+    await syncTemplateNodes()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '加载帖子失败')
   } finally {
@@ -326,11 +392,8 @@ watch(postId, () => {
 })
 
 onMounted(async () => {
-  await loadPost()
   if (!groupsStore.loaded) await groupsStore.refresh().catch(() => {})
-  if (leaderGroups.value.length && !importGid.value) {
-    importGid.value = leaderGroups.value[0].id
-  }
+  await loadPost()
 })
 
 // ---------- helpers ----------
@@ -366,22 +429,22 @@ const authorInitial = computed(() => {
 })
 
 // ---------- actions ----------
+function applyEngagement(
+  patch: Partial<Pick<PostDetail, 'likes' | 'favs' | 'comments' | 'liked_by_me' | 'favored_by_me'>>,
+) {
+  if (!post.value) return
+  Object.assign(post.value, patch)
+}
+
 async function toggleLike() {
   if (!post.value) return
   busy.like = true
   try {
-    const res: any = await Api.likePost(post.value.id)
-    if (res && typeof res === 'object') {
-      if (typeof res.likes === 'number') post.value.likes = res.likes
-      if (typeof res.liked_by_me === 'boolean') {
-        post.value.liked_by_me = res.liked_by_me
-      } else {
-        post.value.liked_by_me = !post.value.liked_by_me
-      }
-    } else {
-      post.value.liked_by_me = !post.value.liked_by_me
-      post.value.likes += post.value.liked_by_me ? 1 : -1
-    }
+    const res = await Api.likePost(post.value.id)
+    applyEngagement({
+      likes: res.likes,
+      liked_by_me: res.liked_by_me ?? res.liked,
+    })
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '操作失败')
   } finally {
@@ -393,18 +456,11 @@ async function toggleFav() {
   if (!post.value) return
   busy.fav = true
   try {
-    const res: any = await Api.favPost(post.value.id)
-    if (res && typeof res === 'object') {
-      if (typeof res.favs === 'number') post.value.favs = res.favs
-      if (typeof res.favored_by_me === 'boolean') {
-        post.value.favored_by_me = res.favored_by_me
-      } else {
-        post.value.favored_by_me = !post.value.favored_by_me
-      }
-    } else {
-      post.value.favored_by_me = !post.value.favored_by_me
-      post.value.favs += post.value.favored_by_me ? 1 : -1
-    }
+    const res = await Api.favPost(post.value.id)
+    applyEngagement({
+      favs: res.favs,
+      favored_by_me: res.favored_by_me ?? res.favored,
+    })
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '操作失败')
   } finally {
@@ -422,7 +478,12 @@ async function copyLink() {
 }
 
 async function onMoreCmd(cmd: string) {
-  if (cmd === 'edit') router.push(`/inspiration/p/${postId.value}/edit`)
+  if (cmd === 'edit') {
+    const query: Record<string, string> = {}
+    const rt = route.query.returnTo
+    if (typeof rt === 'string' && rt.startsWith('/')) query.returnTo = rt
+    router.push({ path: `/inspiration/p/${postId.value}/edit`, query })
+  }
   else if (cmd === 'delete') {
     try {
       await ElMessageBox.confirm('确定要删除这篇帖子吗？此操作不可撤销。', '提示', {
@@ -449,18 +510,22 @@ function repliesOf(parentId: number): Comment[] {
   return comments.value.filter((c) => c.parent_id === parentId)
 }
 
-async function submitComment() {
+async function submitComment(asAnon: boolean) {
   if (!newComment.body.trim()) return
   busy.comment = true
   try {
     const c = await Api.addComment(postId.value, {
       body: newComment.body.trim(),
-      anon: newComment.anon,
+      anon: asAnon,
     })
     comments.value.push(c)
-    if (post.value) post.value.comments += 1
+    if (post.value) {
+      applyEngagement({
+        comments: typeof c.comments === 'number' ? c.comments : post.value.comments + 1,
+      })
+    }
     newComment.body = ''
-    ElMessage.success('已发表')
+    ElMessage.success(asAnon ? '已匿名发表' : '已发表')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '发表失败')
   } finally {
@@ -487,8 +552,13 @@ async function sendReply(parentId: number, anon: boolean) {
       anon,
     })
     comments.value.push(c)
-    if (post.value) post.value.comments += 1
+    if (post.value) {
+      applyEngagement({
+        comments: typeof c.comments === 'number' ? c.comments : post.value.comments + 1,
+      })
+    }
     cancelReply()
+    ElMessage.success(anon ? '已匿名回复' : '已回复')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '回复失败')
   } finally {
@@ -505,130 +575,77 @@ function scrollToComments() {
   commentsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-// ---------- import ----------
-async function confirmImport() {
-  if (!post.value || !importGid.value) return
-  busy.import = true
-  try {
-    await Api.importTemplate(post.value.id, importGid.value, importMode.value)
-    ElMessage.success('已导入到小组')
-    nextTick(() => {
-      const target = leaderGroups.value.find((g) => g.id === importGid.value)
-      if (target) {
-        ElMessageBox.confirm('是否立即查看导入后的项目树？', '导入成功', {
-          confirmButtonText: '前往',
-          cancelButtonText: '留在此页',
-        })
-          .then(() => router.push(`/groups/${target.id}/tree`))
-          .catch(() => {})
-      }
-    })
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '导入失败')
-  } finally {
-    busy.import = false
-  }
-}
 </script>
 
+<style lang="scss">
+@use '@/styles/inspiration-pages.scss';
+</style>
+
 <style lang="scss" scoped>
-.detail-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.detail-skel { padding: 24px; }
-
-/* header */
 .detail-head {
-  padding: 4px 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
+
 .head-meta {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
 }
-.cat-tag {
-  display: inline-block;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 999px;
-  background: rgba(61,126,255,0.12);
-  color: var(--color-primary);
-  &.cat-template { background: rgba(61,126,255,0.12); color: var(--color-primary); }
-  &.cat-case     { background: rgba(103,194,58,0.14); color: #15803D; }
-  &.cat-tip      { background: rgba(230,162,60,0.14); color: #B45309; }
-  &.cat-script   { background: rgba(159,122,234,0.14); color: #6D28D9; }
-  &.cat-tool     { background: rgba(20,184,166,0.14); color: #0F766E; }
-  &.cat-link     { background: rgba(236,72,153,0.14); color: #BE185D; }
-}
-.course-tag {
-  font-size: 12px;
-  color: var(--color-primary);
-  font-weight: 500;
-}
+
 .detail-title {
   margin: 0;
-  font-size: 28px;
+  font-size: var(--fs-2xl);
   font-weight: 700;
   line-height: 1.3;
   color: var(--text-primary);
   word-break: break-word;
 }
+
 .author-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
+
 .author-info {
   display: flex;
   flex-direction: column;
 }
+
 .author-name {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
 }
 
-/* action bar */
-.action-bar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  padding: 10px 14px;
+.structure-card__tree {
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: var(--space-4);
+  padding: var(--space-1) 0;
+}
+
+.structure-card__actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.actions-left, .actions-right { display: flex; gap: 6px; flex-wrap: wrap; }
-.cnt { margin-left: 6px; font-weight: 600; }
-
-/* main grid */
-.main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 16px;
-  align-items: start;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
 }
 
-/* body */
-.body-card { padding: 24px 28px; }
+.body-card,
+.comments-card {
+  width: 100%;
+}
+
 .markdown-body {
-  max-width: 760px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   line-height: 1.7;
-  font-size: 15px;
+  font-size: var(--fs-md);
   color: var(--text-primary);
 
   :deep(h1), :deep(h2), :deep(h3) {
@@ -637,34 +654,34 @@ async function confirmImport() {
     color: var(--text-primary);
     font-weight: 700;
   }
-  :deep(h1) { font-size: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
-  :deep(h2) { font-size: 20px; }
-  :deep(h3) { font-size: 17px; }
+  :deep(h1) { font-size: var(--fs-2xl); border-bottom: 1px solid var(--border-color); padding-bottom: var(--space-2); }
+  :deep(h2) { font-size: var(--fs-xl); }
+  :deep(h3) { font-size: var(--fs-lg); }
   :deep(p)  { margin: 0.8em 0; }
   :deep(a)  { color: var(--color-primary); }
   :deep(ul), :deep(ol) { padding-left: 1.5em; margin: 0.6em 0; }
   :deep(li) { margin: 0.3em 0; }
   :deep(blockquote) {
     margin: 1em 0;
-    padding: 8px 14px;
+    padding: var(--space-2) var(--space-4);
     border-left: 4px solid var(--color-primary);
     background: var(--bg-soft);
     color: var(--text-secondary);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
   }
   :deep(code) {
     background: var(--bg-soft);
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-sm);
     font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--color-danger);
   }
   :deep(pre) {
     background: var(--bg-soft);
     border: 1px solid var(--border-color);
-    padding: 12px 14px;
-    border-radius: 8px;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
     overflow-x: auto;
     line-height: 1.5;
   }
@@ -676,7 +693,7 @@ async function confirmImport() {
   :deep(img) {
     max-width: 100%;
     height: auto;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     margin: 0.8em 0;
   }
   :deep(table) {
@@ -685,7 +702,7 @@ async function confirmImport() {
     margin: 1em 0;
     th, td {
       border: 1px solid var(--border-color);
-      padding: 8px 12px;
+      padding: var(--space-2) var(--space-3);
       text-align: left;
     }
     th { background: var(--bg-soft); }
@@ -693,27 +710,26 @@ async function confirmImport() {
   :deep(hr) { border: none; border-top: 1px dashed var(--border-color); margin: 1.5em 0; }
 }
 
-/* comments */
-.comments-card { padding: 20px 24px; margin-top: 16px; }
+/* ============================================================
+   Comments
+   ============================================================ */
 .section-title {
-  margin: 0 0 14px 0;
-  font-size: 17px;
+  margin: 0 0 var(--space-4) 0;
+  font-size: var(--fs-lg);
   display: flex;
   align-items: center;
   font-weight: 600;
   color: var(--text-primary);
 }
+
 .composer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
-.composer-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+
+
 .comment-list {
   list-style: none;
   padding: 0;
@@ -722,87 +738,41 @@ async function confirmImport() {
   flex-direction: column;
 }
 
-/* sidebar */
-.side-col {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  position: sticky;
-  top: 70px;
-}
-.side-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 10px;
+/* TOC — flat list, no card chrome */
+.toc-block {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
-/* TOC */
+.toc-block__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .toc {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
   max-height: 60vh;
   overflow-y: auto;
 }
-.toc-item {
-  padding: 6px 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  border-radius: 4px;
-  cursor: pointer;
-  line-height: 1.4;
-  &:hover { background: var(--bg-soft); color: var(--color-primary); }
-  &.level-2 { padding-left: 18px; font-size: 12px; }
-  &.level-3 { padding-left: 28px; font-size: 12px; opacity: 0.85; }
-}
 
-/* Import card */
-.import-card {
-  background: linear-gradient(135deg, rgba(61,126,255,0.05), rgba(155,91,255,0.05));
-  border: 1px solid rgba(61,126,255,0.2);
-}
-.import-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.import-icon {
-  font-size: 24px;
-  color: var(--color-primary);
-  background: rgba(61,126,255,0.12);
-  padding: 8px;
-  border-radius: 10px;
-}
-.lbl {
-  display: block;
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-.mt-4  { margin-top: 4px; }
-.mt-12 { margin-top: 12px; }
+/* TOC depth indentation only — base styles come from .list-row */
+.toc-item.level-2 { padding-left: var(--space-5); }
+.toc-item.level-3 { padding-left: var(--space-8); opacity: 0.8; }
 
 @media (max-width: 992px) {
-  .main-grid { grid-template-columns: 1fr; }
-  .side-col {
-    position: static;
-    display: none;
-  }
+  .insp-side-col { display: none; }
 }
 
 @media (max-width: 768px) {
-  .body-card { padding: 16px; }
-  .detail-title { font-size: 22px; }
-  .comments-card { padding: 16px; }
-  .action-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
+  .detail-title { font-size: var(--fs-xl); }
 }
 </style>

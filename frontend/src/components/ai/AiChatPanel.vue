@@ -314,16 +314,14 @@ watch(messages, () => scrollMsgs(), { deep: true })
 .aip-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(135deg, rgba(61,126,255,0.06), rgba(155,91,255,0.06));
-  .head-icon {
-    font-size: 18px;
-    color: var(--color-primary);
-  }
+  background: linear-gradient(135deg, rgba(61, 126, 255, 0.06), rgba(155, 91, 255, 0.06));
+
+  .head-icon { font-size: 18px; color: var(--color-primary); }
   .head-title { font-weight: 600; flex: 1; }
-  .collapse-btn { padding: 4px; }
+  .collapse-btn { padding: var(--space-1); }
 }
 
 .aip-tabs {
@@ -334,68 +332,67 @@ watch(messages, () => scrollMsgs(), { deep: true })
 
   :deep(.el-tabs__header) {
     margin: 0;
-    padding: 0 12px;
+    padding: 0 var(--space-4);
   }
   :deep(.el-tabs__content) {
     flex: 1;
     overflow: hidden;
     min-height: 0;
   }
-  :deep(.el-tab-pane) {
-    height: 100%;
-  }
+  :deep(.el-tab-pane) { height: 100%; }
 }
 
 .pane {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-4);
   min-height: 0;
 }
 
-.gen-pane .hint { margin-bottom: 4px; }
 .gen-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
+
 .grow { flex: 1; }
 
 .shimmer-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: var(--space-2);
+  padding: var(--space-3);
   background: var(--bg-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
+
 .shimmer-bar {
   height: 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: linear-gradient(90deg, var(--border-color) 0%, var(--bg-soft) 50%, var(--border-color) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }
-.shimmer-status { margin-top: 4px; }
+
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
 
-/* edit pane */
-.edit-pane { padding-bottom: 8px; }
+/* Edit / chat pane */
 .msg-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-right: 4px;
+  gap: var(--space-2);
+  padding-right: var(--space-1);
   min-height: 200px;
 }
-.msg-empty { padding: 12px; }
+
+.msg-empty { padding: var(--space-3); }
 
 .msg {
   display: flex;
@@ -403,30 +400,33 @@ watch(messages, () => scrollMsgs(), { deep: true })
   &.msg-user { align-items: flex-end; }
   &.msg-assistant { align-items: flex-start; }
 }
+
 .msg-bubble {
   max-width: 90%;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--bg-soft);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   word-break: break-word;
 }
+
 .msg-user .msg-bubble {
-  background: rgba(61,126,255,0.12);
+  background: var(--color-primary-light);
   color: var(--color-primary);
 }
+
 .msg-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
-.msg-cached { margin-top: 2px; }
 
 .msg-thinking {
   display: flex;
-  gap: 4px;
-  padding: 4px 0;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+
   .dot {
     width: 6px; height: 6px;
     background: var(--color-primary);
@@ -436,6 +436,7 @@ watch(messages, () => scrollMsgs(), { deep: true })
     &:nth-child(3) { animation-delay: 0.4s; }
   }
 }
+
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
@@ -443,10 +444,9 @@ watch(messages, () => scrollMsgs(), { deep: true })
 
 .edit-input {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: flex-end;
   border-top: 1px solid var(--border-color);
-  padding-top: 8px;
-  margin-top: 4px;
+  padding-top: var(--space-3);
 }
 </style>

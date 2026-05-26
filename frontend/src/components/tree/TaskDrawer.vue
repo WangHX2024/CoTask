@@ -82,7 +82,7 @@
             placement="top"
           >
             <span class="assign-chip">
-              <el-avatar :size="22" :src="memberMap.get(uid)?.avatar_url">
+              <el-avatar :size="24" :src="memberMap.get(uid)?.avatar_url">
                 {{ (memberMap.get(uid)?.name || '?').slice(0, 1) }}
               </el-avatar>
               <span class="chip-name">{{ memberMap.get(uid)?.name || '?' }}</span>
@@ -618,7 +618,7 @@ function applySuggestion(uid: number) {
   gap: 4px;
   padding: 2px 6px 2px 2px;
   background: var(--bg-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   .chip-name { padding: 0 4px; }
   .chip-x {

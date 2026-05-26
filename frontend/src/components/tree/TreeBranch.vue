@@ -169,7 +169,7 @@ function onDrop(ev: DragEvent) {
   justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   &:hover { background: var(--bg-soft); }
   .el-icon {
     transition: transform .15s ease;

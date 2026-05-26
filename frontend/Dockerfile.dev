@@ -1,0 +1,11 @@
+FROM node:20-alpine
+WORKDIR /app
+
+# Install dependencies first (layer cached separately from source)
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# Source code is mounted as a volume at runtime — do not COPY here
+EXPOSE 5173
+
+CMD ["npm", "run", "dev"]

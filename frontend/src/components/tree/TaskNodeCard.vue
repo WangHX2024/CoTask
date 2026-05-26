@@ -226,15 +226,19 @@ function onCmd(c: string) {
   max-width: 100%;
 }
 
+/* Node chips (leaf / refined) — extend global .badge pattern */
 .chip {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-xs);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  font-weight: 500;
   white-space: nowrap;
+  line-height: 1.4;
 }
-.chip-leaf    { background: rgba(61,126,255,0.12); color: var(--color-primary); }
-.chip-refined { background: rgba(103,194,58,0.14); color: #15803D; }
+.chip-leaf    { background: var(--color-primary-light);   color: var(--color-primary); }
+.chip-refined { background: rgba(34, 197, 94, 0.14);      color: #15803D; }
 
 .tnc-right {
   display: flex;
@@ -275,7 +279,7 @@ function onCmd(c: string) {
   padding: 3px 8px;
   font-size: 11px;
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   white-space: nowrap;
   .el-icon { font-size: 11px; }
 

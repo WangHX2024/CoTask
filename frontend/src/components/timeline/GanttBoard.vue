@@ -188,7 +188,7 @@ onBeforeUnmount(() => {
   .g-role {
     font-size: 10px;
     padding: 1px 6px;
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     background: rgba(230, 162, 60, 0.16);
     color: var(--color-warning);
     font-weight: 600;

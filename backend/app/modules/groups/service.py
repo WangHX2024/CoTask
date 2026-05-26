@@ -105,8 +105,10 @@ def update_group(uid: int, gid: int, data: dict) -> dict:
 
 def join_group(uid: int, invite_code: str) -> dict:
     g = db.session.execute(db.select(Group).where(Group.invite_code == invite_code)).scalar_one_or_none()
-    if not g or g.status != "active":
-        raise NotFound("invite")
+    if not g:
+        raise NotFound(message="邀请码不正确，请向组长核对后重试")
+    if g.status != "active":
+        raise BadRequest("GROUP_INACTIVE", "该小组已暂停或解散，暂时无法加入")
     existing = db.session.execute(
         db.select(GroupMember).where(GroupMember.group_id == g.id, GroupMember.user_id == uid)
     ).scalar_one_or_none()

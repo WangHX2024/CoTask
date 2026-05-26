@@ -1,22 +1,19 @@
 <template>
   <div class="files-page">
-    <!-- Header -->
-    <div class="page-head">
-      <div class="head-left">
-        <el-icon class="head-icon"><FolderOpened /></el-icon>
-        <h2 class="head-title">
-          文件库
-          <span class="muted dot-sep">·</span>
-          <span class="group-name">{{ groups.current?.name || '小组' }}</span>
-        </h2>
+    <!-- Page header -->
+    <header class="page-header">
+      <div class="page-header-text">
+        <h1 class="page-title">文件库</h1>
+        <p class="page-desc">{{ groups.current?.course_name }} · {{ groups.current?.name || '小组' }}</p>
       </div>
-      <div class="head-right">
-        <el-radio-group v-model="viewMode" size="default">
-          <el-radio-button label="task">按任务</el-radio-button>
-          <el-radio-button label="folder">按文件夹</el-radio-button>
-        </el-radio-group>
+      <div class="page-header-actions">
+        <SegmentedControl
+          v-model="viewMode"
+          size="md"
+          :options="viewModeOptions"
+        />
       </div>
-    </div>
+    </header>
 
     <div class="files-layout">
       <!-- Mobile dropdown selector -->
@@ -67,12 +64,12 @@
             <div
               v-for="t in leafTasks"
               :key="t.id"
-              class="list-item"
-              :class="{ active: selectedTaskId === t.id }"
+              class="list-row"
+              :class="{ 'is-active': selectedTaskId === t.id }"
               @click="onPickTask(t.id)"
             >
-              <el-icon class="li-icon"><Memo /></el-icon>
-              <span class="li-text">{{ t.title }}</span>
+              <el-icon><Memo /></el-icon>
+              <span class="list-row__text">{{ t.title }}</span>
             </div>
             <div v-if="!treeLoading && leafTasks.length === 0" class="empty-tip">
               暂无任务
@@ -96,12 +93,12 @@
           </div>
           <div v-loading="folderLoading" class="panel-body">
             <div
-              class="list-item"
-              :class="{ active: selectedFolderId === 0 }"
+              class="list-row"
+              :class="{ 'is-active': selectedFolderId === 0 }"
               @click="onPickFolder(0)"
             >
-              <el-icon class="li-icon"><FolderOpened /></el-icon>
-              <span class="li-text">(根目录)</span>
+              <el-icon><FolderOpened /></el-icon>
+              <span class="list-row__text">(根目录)</span>
             </div>
             <FolderRow
               v-for="node in folderTree"
@@ -250,6 +247,12 @@ import dayjs from 'dayjs'
 import { Api, type FileInfo, type FolderInfo, type TaskNode } from '@/api'
 import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
+
+const viewModeOptions = [
+  { label: '按任务', value: 'task' as const },
+  { label: '按文件夹', value: 'folder' as const },
+]
 
 // ---------- folder row component (inline definition) ----------
 const FolderRow = {
@@ -261,12 +264,12 @@ const FolderRow = {
     depth: { type: Number, default: 0 },
   },
   emits: ['pick', 'add-child'],
-  setup(props: any, { emit }: any) {
+    setup(props: any, { emit }: any) {
     const expanded = ref(true)
     return () => {
       const hasChildren = props.node.children?.length > 0
-      const rowClass = ['list-item']
-      if (props.selectedId === props.node.id) rowClass.push('active')
+      const rowClass = ['list-row']
+      if (props.selectedId === props.node.id) rowClass.push('is-active')
       const handle = (ev: Event) => {
         ev.stopPropagation()
         emit('pick', props.node.id)
@@ -291,7 +294,7 @@ const FolderRow = {
               ? h('span', { class: 'tw-caret', onClick: toggle }, expanded.value ? '▾' : '▸')
               : h('span', { class: 'tw-caret tw-empty' }, ''),
             h('span', { class: 'li-icon-wrap' }, '📁'),
-            h('span', { class: 'li-text' }, props.node.name),
+            h('span', { class: 'list-row__text' }, props.node.name),
             props.isLeader
               ? h(
                   'span',
@@ -722,38 +725,22 @@ watch(gid, async () => {
 .files-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  height: 100%;
-}
-
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-
-  .head-left { display: flex; align-items: center; gap: 10px; }
-  .head-icon { font-size: 22px; color: var(--color-primary); }
-  .head-title {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  .dot-sep { margin: 0 6px; color: var(--text-tertiary); }
-  .group-name { color: var(--text-secondary); font-weight: 500; }
+  gap: var(--space-5);
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-6);
+  box-sizing: border-box;
 }
 
 .files-layout {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
   flex: 1;
   min-height: 0;
 }
 
 .left-panel {
-  width: 240px;
+  width: 220px;
   flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -761,51 +748,36 @@ watch(gid, async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
+
 .panel-head {
-  height: 40px;
-  padding: 0 12px;
+  height: 48px;
+  padding: 0 var(--space-4);
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
   font-weight: 600;
-  color: var(--text-primary);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
 }
+
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  padding: var(--space-2);
 }
 
-.list-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--text-primary);
-  font-size: 13px;
-  &:hover { background: var(--bg-soft); }
-  &.active {
-    background: rgba(61,126,255,.10);
-    color: var(--color-primary);
-  }
-  .li-icon { font-size: 14px; color: var(--text-secondary); }
-  .li-text {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
+/* File / folder rows use global .list-row */
 .empty-tip {
-  padding: 16px;
+  padding: var(--space-4);
   text-align: center;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .folder-row-wrap :deep(.tw-caret) {
@@ -820,7 +792,7 @@ watch(gid, async () => {
   margin-left: auto;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -837,7 +809,7 @@ watch(gid, async () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-4);
   overflow: auto;
 }
 
@@ -848,22 +820,25 @@ watch(gid, async () => {
   background: var(--bg-page);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
+
 .upload-zone {
   width: 100%;
   :deep(.el-upload-dragger) {
-    padding: 18px;
+    padding: var(--space-4);
     border-radius: var(--radius-md);
     border-style: dashed;
     border-color: var(--border-color);
     background: var(--bg-card);
   }
 }
+
 .up-icon { font-size: 32px; color: var(--color-primary); }
+
 .up-text {
-  margin-top: 4px;
-  font-size: 13px;
+  margin-top: var(--space-1);
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   em { color: var(--color-primary); font-style: normal; }
 }
@@ -871,20 +846,23 @@ watch(gid, async () => {
 .upload-progress {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
+
 .up-item {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
 }
+
 .up-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-  font-size: 13px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-sm);
+
   .up-row-icon { color: var(--text-secondary); }
   .up-name {
     flex: 1;
@@ -898,34 +876,39 @@ watch(gid, async () => {
   padding: 0;
   overflow: hidden;
 }
-.ft-head, .ft-row {
+
+.ft-head,
+.ft-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.8fr) 100px 130px 150px 160px;
   align-items: center;
-  padding: 10px 14px;
-  gap: 8px;
-  font-size: 13px;
+  padding: var(--space-3) var(--space-4);
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
 }
+
 .ft-head {
   background: var(--bg-soft);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   border-bottom: 1px solid var(--border-color);
 }
+
 .ft-row {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   color: var(--text-primary);
-  &:hover {
-    background: var(--bg-soft);
-  }
+
+  &:hover { background: var(--bg-soft); }
   &:last-child { border-bottom: none; }
 }
+
 .col-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
+
   .mime-icon { font-size: 18px; flex-shrink: 0; }
   .filename {
     overflow: hidden;
@@ -933,22 +916,26 @@ watch(gid, async () => {
     white-space: nowrap;
   }
 }
-.col-size, .col-user, .col-time {
-  color: var(--text-secondary);
-}
+
+.col-size,
+.col-user,
+.col-time { color: var(--text-secondary); }
+
 .col-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   justify-content: flex-end;
 }
+
 .ft-empty {
-  padding: 40px 16px;
+  padding: var(--space-10) var(--space-4);
   text-align: center;
   color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
+
   .el-icon { font-size: 28px; }
 }
 
