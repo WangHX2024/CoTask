@@ -32,17 +32,10 @@ const classes = computed(() => [
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <rect width="44" height="44" rx="8" class="cotask-logo__mark-bg" />
-      <path
-        d="M22 16v6M22 22l-8 7M22 22l8 7"
-        class="cotask-logo__mark-line"
-        stroke-width="2.25"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <circle cx="22" cy="13" r="3.25" class="cotask-logo__mark-node" />
-      <circle cx="14" cy="31" r="3.25" class="cotask-logo__mark-node" />
-      <circle cx="30" cy="31" r="3.25" class="cotask-logo__mark-node" />
+      <rect width="44" height="44" rx="10" class="cotask-logo__mark-bg" />
+      <circle cx="16.5" cy="22" r="8.5" class="cotask-logo__mark-ring" />
+      <circle cx="27.5" cy="22" r="8.5" class="cotask-logo__mark-ring" />
+      <circle cx="22" cy="22" r="3" class="cotask-logo__mark-core" />
     </svg>
     <span v-if="showWordmark" class="cotask-logo__word" aria-hidden="true">
       <span class="cotask-logo__co">Co</span><span class="cotask-logo__task">Task</span>
@@ -68,19 +61,19 @@ const classes = computed(() => [
   fill: var(--color-primary);
 }
 
-.cotask-logo__mark-line {
-  stroke: var(--text-inverse);
+.cotask-logo__mark-ring {
+  fill: var(--text-inverse);
 }
 
-.cotask-logo__mark-node {
-  fill: var(--text-inverse);
+.cotask-logo__mark-core {
+  fill: var(--color-primary);
 }
 
 .cotask-logo__word {
   display: inline-flex;
   align-items: baseline;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
   white-space: nowrap;
 }
 
