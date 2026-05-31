@@ -30,7 +30,7 @@ const roots = computed(() => buildPreviewTree(props.nodes))
   --tree-guide: 20px;
   --tree-trunk-x: calc(var(--tree-guide) / 2);
   --tree-dot-size: 8px;
-  --tree-leaf-dot-size: 6px;
+  --tree-terminal-dot-size: 6px;
 
   list-style: none;
   margin: 0;

@@ -2,8 +2,6 @@
 
 > 完整可部署的全栈实现。包含 Vue 3 前端 + Flask 后端 + MySQL/Redis/MinIO + Celery + Nginx，docker compose 一键拉起。
 
-详细产品方案见 [`docs/开发方案.md`](docs/开发方案.md)。前端视觉规范见 [`docs/frontend-design-spec.md`](docs/frontend-design-spec.md)。
-
 ## 快速开始
 
 ### 生产模式
@@ -26,7 +24,7 @@ make seed                        # （可选）写入演示数据
 | OpenAPI 文档 | http://localhost/docs  |
 | MinIO 控制台 | http://localhost:9001  |
 
-### 开发模式（含前端热更新 HMR）
+### 开发模式
 
 前端以 Vite dev server 运行，修改 `.vue` / `.ts` 文件后浏览器**自动热更新**，无需重新构建镜像。
 
@@ -42,8 +40,6 @@ make seed                        # （可选）写入演示数据
 | 前端（Nginx 代理）  | http://localhost                | 经 Nginx 转发，HMR 同样有效   |
 | API                 | http://localhost:5173/api       | 由 Vite 代理至 api 容器       |
 | MinIO 控制台        | http://localhost:9001           |                               |
-
-> **WSL2 说明**：开发模式已启用文件系统轮询（`CHOKIDAR_USEPOLLING=true`），WSL2 + Docker 下文件监听完全正常。
 
 演示账号（执行 `make seed` 后可用）：
 - 组长：`13800000001` / `password123`
@@ -77,8 +73,7 @@ make seed                        # （可选）写入演示数据
 │       └── router/
 ├── scripts/                # seed、ops 工具
 └── docs/
-    ├── 开发方案.md          # 产品与架构参考文档
-    └── frontend-design-spec.md  # 前端视觉风格规范
+
 ```
 
 ## 常用命令
@@ -105,9 +100,9 @@ cd frontend && npm run test  # 前端 vitest
 ## AI 配置
 
 支持四家（`backend/app/modules/ai/client.py`）：
-- Anthropic Claude（推荐）
-- OpenAI / 兼容 endpoint
-- DeepSeek（OpenAI 兼容 API，`AI_PROVIDER=deepseek`）
+- Anthropic Claude
+- OpenAI
+- DeepSeek
 - 阿里通义千问 (Dashscope)
 
 `.env` 里设置 `AI_PROVIDER=anthropic`（或 `deepseek` 等）并填入对应 key。失败会按 `AI_PROVIDER_FALLBACK` 顺序降级。

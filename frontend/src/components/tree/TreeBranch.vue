@@ -41,7 +41,6 @@
           :node-map="nodeMap"
           :children-map="childrenMap"
           :selected-id="selectedId"
-          :current-role="currentRole"
           :expanded="expanded"
           @toggle="(id: number) => emit('toggle', id)"
           @select="(id: number) => emit('select', id)"
@@ -50,7 +49,7 @@
           @drop-on="(p: any) => emit('drop-on', p)"
         />
 
-        <div v-if="canEdit && !node.is_leaf" class="add-child-row">
+        <div v-if="canEdit" class="add-child-row">
           <el-button
             size="small"
             text
@@ -78,7 +77,6 @@ const props = defineProps<{
   nodeMap: Map<number, TaskNode>
   childrenMap: Map<number | null, TaskNode[]>
   selectedId: number
-  currentRole: 'leader' | 'member' | null
   expanded: Record<number, boolean>
 }>()
 
@@ -90,7 +88,7 @@ const emit = defineEmits<{
   (e: 'drop-on', payload: { id: number; newParentId: number | null; position: number }): void
 }>()
 
-const canEdit = computed(() => props.currentRole === 'leader')
+const canEdit = computed(() => !!props.node.can_manage)
 const canDrag = computed(() => canEdit.value)
 
 const children = computed(() => props.childrenMap.get(props.node.id) || [])

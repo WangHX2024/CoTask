@@ -1,5 +1,22 @@
 """Shared marshmallow schemas."""
+from datetime import date, datetime
+
 from marshmallow import Schema, fields
+
+from .datetime_util import to_api_datetime
+
+
+class UTCDateTime(fields.DateTime):
+    """Serialize DB naive UTC datetimes as ISO-8601 with Z suffix."""
+
+    def _serialize(self, value, attr, obj, **kwargs):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (datetime, date)):
+            return to_api_datetime(value)
+        return super()._serialize(value, attr, obj, **kwargs)
 
 
 class PaginationMeta(Schema):

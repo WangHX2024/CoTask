@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select, text
 
 from ...common import audit
+from ...common.datetime_util import to_api_datetime, utc_now
 from ...common.errors import BadRequest, Forbidden, NotFound
 from ...common.tx import tx
 from ...extensions import db
@@ -51,7 +52,7 @@ def _serialize(p: InspirationPost, viewer_id: int | None = None, with_body: bool
         "link_url": p.link_url,
         "has_template": p.template_root_id is not None,
         "excerpt": excerpt,
-        "created_at": p.created_at,
+        "created_at": to_api_datetime(p.created_at),
         "liked_by_me": liked,
         "favored_by_me": favored,
     }
@@ -93,6 +94,54 @@ def _post_search_filter(keyword: str):
     if "匿名" in kw:
         clauses.append(InspirationPost.anon.is_(True))
     return or_(*clauses)
+
+
+def _unique_keywords(keywords: list[str]) -> list[str]:
+    """Deduplicate while keeping order (prefer longer / later entries)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in keywords:
+        k = (raw or "").strip()
+        if len(k) < 2:
+            continue
+        key = k.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(k)
+    return out
+
+
+def search_posts_for_keyword(viewer_id: int, keyword: str, *, limit: int = 15) -> list[dict]:
+    clause = _post_search_filter(keyword)
+    if clause is None:
+        return []
+    rows = db.session.execute(
+        select(InspirationPost)
+        .where(InspirationPost.status == "published", clause)
+        .order_by(InspirationPost.created_at.desc())
+        .limit(limit)
+    ).scalars().all()
+    return [_serialize(p, viewer_id) for p in rows]
+
+
+def related_posts_union(viewer_id: int, keywords: list[str], *, limit: int = 12) -> dict:
+    """Search inspiration plaza per keyword and return de-duplicated union."""
+    keys = _unique_keywords(keywords)
+    seen_ids: set[int] = set()
+    items: list[dict] = []
+    for kw in keys:
+        for row in search_posts_for_keyword(viewer_id, kw, limit=15):
+            pid = row["id"]
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            items.append({**row, "matched_keyword": kw})
+            if len(items) >= limit:
+                break
+        if len(items) >= limit:
+            break
+    return {"keywords": keys, "items": items}
 
 
 def list_posts(viewer_id: int, query: dict):
@@ -405,7 +454,7 @@ def _serialize_comment(c: PostComment) -> dict:
         "author_avatar": "" if c.anon else (u.avatar_url if u else ""),
         "anon": c.anon,
         "parent_id": c.parent_id,
-        "created_at": c.created_at,
+        "created_at": to_api_datetime(c.created_at),
     }
 
 
@@ -428,7 +477,7 @@ def import_template(actor_id: int, post_id: int, to_group_id: int, mode: str = "
             s.execute(
                 db.update(Task).where(
                     Task.group_id == to_group_id, Task.deleted_at.is_(None)
-                ).values(deleted_at=datetime.utcnow())
+                ).values(deleted_at=utc_now())
             )
 
         synth_root = db.session.get(Task, p.template_root_id)

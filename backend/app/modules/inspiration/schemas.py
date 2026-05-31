@@ -1,5 +1,6 @@
 from marshmallow import Schema, ValidationError, fields, validate, validates
 
+from ...common.schemas import UTCDateTime
 from ..tree.schemas import TaskNode
 
 CATEGORIES = ["template", "case", "tip", "script", "tool", "link"]
@@ -33,10 +34,16 @@ class PostBrief(Schema):
     link_url = fields.Str()
     has_template = fields.Bool()
     excerpt = fields.Str()
-    created_at = fields.DateTime()
+    created_at = UTCDateTime()
     liked_by_me = fields.Bool()
     favored_by_me = fields.Bool()
     is_author = fields.Bool()
+    matched_keyword = fields.Str(allow_none=True)
+
+
+class RelatedInspirationResponse(Schema):
+    keywords = fields.List(fields.Str())
+    items = fields.List(fields.Nested(PostBrief))
 
 
 class PostDetail(PostBrief):
@@ -88,7 +95,7 @@ class CommentBrief(Schema):
     author_avatar = fields.Str()
     anon = fields.Bool()
     parent_id = fields.Int(allow_none=True)
-    created_at = fields.DateTime()
+    created_at = UTCDateTime()
     # Post comment total — included when creating a comment
     comments = fields.Int(dump_only=True, allow_none=True)
 

@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { PreviewTreeNode } from './templatePreviewTree'
 
 defineOptions({ name: 'TemplatePreviewBranch' })
 
-defineProps<{
+const props = defineProps<{
   item: PreviewTreeNode
   isLast?: boolean
   isRoot?: boolean
 }>()
+
+const hasChildren = computed(() => props.item.children.length > 0)
 </script>
 
 <template>
@@ -21,18 +24,17 @@ defineProps<{
     <div
       class="tree-preview__row"
       :class="{
-        'tree-preview__row--leaf': item.node.is_leaf,
-        'tree-preview__row--branch': !item.node.is_leaf,
+        'tree-preview__row--terminal': !hasChildren,
+        'tree-preview__row--branch': hasChildren,
       }"
     >
       <div class="tree-preview__track" aria-hidden="true">
         <span class="tree-preview__dot" />
       </div>
       <span class="tree-preview__title">{{ item.node.title }}</span>
-      <span v-if="item.node.is_leaf" class="tree-preview__tag">叶子</span>
     </div>
 
-    <ul v-if="item.children.length" class="tree-preview__children">
+    <ul v-if="hasChildren" class="tree-preview__children">
       <TemplatePreviewBranch
         v-for="(child, idx) in item.children"
         :key="child.node.id"
@@ -87,7 +89,7 @@ defineProps<{
   color: var(--text-primary);
 }
 
-.tree-preview__row--leaf .tree-preview__title {
+.tree-preview__row--terminal .tree-preview__title {
   color: var(--text-secondary);
 }
 
@@ -103,9 +105,9 @@ defineProps<{
   box-sizing: border-box;
 }
 
-.tree-preview__row--leaf .tree-preview__dot {
-  width: var(--tree-leaf-dot-size, 6px);
-  height: var(--tree-leaf-dot-size, 6px);
+.tree-preview__row--terminal .tree-preview__dot {
+  width: var(--tree-terminal-dot-size, 6px);
+  height: var(--tree-terminal-dot-size, 6px);
   border-radius: 1px;
   transform: rotate(45deg);
   background: var(--text-tertiary);
@@ -119,12 +121,6 @@ defineProps<{
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.4;
-}
-
-.tree-preview__tag {
-  flex-shrink: 0;
-  font-size: var(--fs-xs);
-  color: var(--text-tertiary);
 }
 
 /* Vertical trunk: from parent row center through all siblings */

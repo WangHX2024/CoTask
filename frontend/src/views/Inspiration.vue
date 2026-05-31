@@ -312,6 +312,10 @@ function onKey(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  const qq = route.query.q
+  if (typeof qq === 'string' && qq.trim()) {
+    q.value = qq.trim()
+  }
   void fetchPosts()
   window.addEventListener('keydown', onKey)
 })

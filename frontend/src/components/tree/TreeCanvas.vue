@@ -10,7 +10,6 @@
         :node-map="visibleMap"
         :children-map="visibleChildrenMap"
         :selected-id="selectedId"
-        :current-role="currentRole"
         :expanded="expanded"
         @toggle="onToggle"
         @select="onSelect"
@@ -19,12 +18,12 @@
         @drop-on="onDropOn"
       />
     </template>
-    <el-empty v-else description="还没有任务节点，点击 + 节点 开始拆分项目" :image-size="120" />
+    <el-empty v-else description="还没有任务节点，点击 新建节点 开始添加任务" :image-size="120" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import type { TaskNode, MemberInfo } from '@/api'
 import TreeBranch from './TreeBranch.vue'
 
@@ -32,7 +31,6 @@ const props = defineProps<{
   nodes: TaskNode[]
   focusOnMine: boolean
   currentUserId: number
-  currentRole: 'leader' | 'member' | null
   selectedId: number
   members: MemberInfo[]
 }>()
@@ -47,9 +45,46 @@ const emit = defineEmits<{
 // expand-by-default
 const expanded = reactive<Record<number, boolean>>({})
 
+const childIndex = computed(() => {
+  const m = new Map<number | null, TaskNode[]>()
+  for (const n of props.nodes) {
+    const pid = n.parent_id ?? null
+    if (!m.has(pid)) m.set(pid, [])
+    m.get(pid)!.push(n)
+  }
+  for (const arr of m.values()) arr.sort((a, b) => a.position - b.position)
+  return m
+})
+
 function onToggle(id: number) {
   expanded[id] = !(expanded[id] !== false)
 }
+
+/**
+ * Auto expand/collapse for nodes that have children:
+ * - parent status !== done → expanded (show children)
+ * - parent status === done → collapsed
+ */
+function syncParentExpandCollapse() {
+  for (const n of props.nodes) {
+    const kids = childIndex.value.get(n.id)
+    if (!kids?.length) continue
+    expanded[n.id] = n.status !== 'done'
+  }
+}
+
+/** Re-run when any parent's status or child list changes (immediate on patch/load). */
+const parentExpandKey = computed(() => {
+  const parts: string[] = []
+  for (const n of props.nodes) {
+    const count = childIndex.value.get(n.id)?.length ?? 0
+    if (count > 0) parts.push(`${n.id}:${n.status}:${count}`)
+  }
+  return parts.join('|')
+})
+
+watch(parentExpandKey, () => syncParentExpandCollapse(), { immediate: true })
+
 function onSelect(id: number) {
   emit('select', id)
 }
@@ -62,18 +97,6 @@ function onDelete(id: number) {
 function onDropOn(payload: { id: number; newParentId: number | null; position: number }) {
   emit('drop', payload)
 }
-
-// build child index for quick subtree lookups
-const childIndex = computed(() => {
-  const m = new Map<number | null, TaskNode[]>()
-  for (const n of props.nodes) {
-    const pid = n.parent_id ?? null
-    if (!m.has(pid)) m.set(pid, [])
-    m.get(pid)!.push(n)
-  }
-  for (const arr of m.values()) arr.sort((a, b) => a.position - b.position)
-  return m
-})
 
 // determine which nodes are visible in focus-on-mine mode: keep a node if itself
 // or any descendant has currentUserId as assignee. Always include ancestors of visible nodes.

@@ -25,13 +25,16 @@
         <ul v-if="oldFlat.length" class="diff-list">
           <li
             v-for="(row, i) in oldFlat"
-            :key="`o-${i}`"
+            :key="`o-${row.path}-${i}`"
             class="diff-row"
             :class="`r-${row.status}`"
             :style="{ paddingLeft: `${row.depth * 16 + 12}px` }"
           >
             <span class="diff-marker">{{ markerOld(row.status) }}</span>
-            <span class="diff-title">{{ row.title }}</span>
+            <div class="diff-main">
+              <span class="diff-title">{{ row.title }}</span>
+              <p v-if="row.detail" class="diff-detail muted tiny">{{ row.detail }}</p>
+            </div>
           </li>
         </ul>
         <el-empty v-else description="尚未生成项目树" :image-size="80" />
@@ -40,13 +43,16 @@
         <ul v-if="newFlat.length" class="diff-list">
           <li
             v-for="(row, i) in newFlat"
-            :key="`n-${i}`"
+            :key="`n-${row.path}-${i}`"
             class="diff-row"
             :class="`r-${row.status}`"
             :style="{ paddingLeft: `${row.depth * 16 + 12}px` }"
           >
             <span class="diff-marker">{{ markerNew(row.status) }}</span>
-            <span class="diff-title">{{ row.title }}</span>
+            <div class="diff-main">
+              <span class="diff-title">{{ row.title }}</span>
+              <p v-if="row.detail" class="diff-detail muted tiny">{{ row.detail }}</p>
+            </div>
           </li>
         </ul>
         <el-empty v-else description="AI 未返回结果" :image-size="80" />
@@ -58,78 +64,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Document, MagicStick } from '@element-plus/icons-vue'
-import type { TaskNode } from '@/api'
+import type { MemberInfo, TaskNode } from '@/api'
+import type { AiTreeNode } from '@/utils/aiTreeContext'
+import { buildDiffColumns, type DiffStatus } from '@/utils/treeDiff'
 
 const props = defineProps<{
   oldNodes: TaskNode[] | undefined
-  newNodes: any[]
+  newNodes: AiTreeNode[]
+  members?: MemberInfo[]
 }>()
 
-type DiffStatus = 'add' | 'del' | 'edit' | 'same'
-interface DiffRow {
-  title: string
-  depth: number
-  status: DiffStatus
-  path: string
-}
-
-// build a path-keyed map ("rootTitle/childTitle/...") from a hierarchical node list
-function buildPathMap(nodes: any[] | undefined): Map<string, { title: string; depth: number }> {
-  const out = new Map<string, { title: string; depth: number }>()
-  if (!nodes || !nodes.length) return out
-
-  // group by parent for hierarchical traversal
-  const byParent = new Map<number | null, any[]>()
-  for (const n of nodes) {
-    const pid = n.parent_id ?? null
-    if (!byParent.has(pid)) byParent.set(pid, [])
-    byParent.get(pid)!.push(n)
-  }
-  for (const arr of byParent.values()) {
-    arr.sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-  }
-  function walk(parentId: number | null, parentPath: string, depth: number) {
-    const children = byParent.get(parentId) || []
-    for (const n of children) {
-      const path = parentPath ? `${parentPath} / ${n.title}` : n.title
-      out.set(path, { title: n.title, depth })
-      walk(n.id, path, depth + 1)
-    }
-  }
-  walk(null, '', 0)
-  return out
-}
-
-const oldFlat = computed<DiffRow[]>(() => {
-  const oldMap = buildPathMap(props.oldNodes)
-  const newMap = buildPathMap(props.newNodes)
-  const rows: DiffRow[] = []
-  for (const [path, v] of oldMap.entries()) {
-    let status: DiffStatus = 'same'
-    if (!newMap.has(path)) {
-      // check if same leaf title exists at different path
-      const sameTitle = Array.from(newMap.values()).some((x) => x.title === v.title)
-      status = sameTitle ? 'edit' : 'del'
-    }
-    rows.push({ title: v.title, depth: v.depth, status, path })
-  }
-  return rows
-})
-
-const newFlat = computed<DiffRow[]>(() => {
-  const oldMap = buildPathMap(props.oldNodes)
-  const newMap = buildPathMap(props.newNodes)
-  const rows: DiffRow[] = []
-  for (const [path, v] of newMap.entries()) {
-    let status: DiffStatus = 'same'
-    if (!oldMap.has(path)) {
-      const sameTitle = Array.from(oldMap.values()).some((x) => x.title === v.title)
-      status = sameTitle ? 'edit' : 'add'
-    }
-    rows.push({ title: v.title, depth: v.depth, status, path })
-  }
-  return rows
-})
+const diff = computed(() =>
+  buildDiffColumns(props.oldNodes, props.newNodes, props.members),
+)
+const oldFlat = computed(() => diff.value.oldRows)
+const newFlat = computed(() => diff.value.newRows)
 
 function markerOld(s: DiffStatus) {
   return s === 'del' ? '−' : s === 'edit' ? '~' : '·'
@@ -164,9 +113,12 @@ function markerNew(s: DiffStatus) {
 }
 .diff-legend {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 0 4px;
+  align-items: center;
   .lg-item { display: inline-flex; align-items: center; gap: 4px; }
+  .lg-hint { margin-left: auto; font-style: italic; }
   .dot {
     display: inline-block;
     width: 8px; height: 8px;
@@ -198,7 +150,7 @@ function markerNew(s: DiffStatus) {
 }
 .diff-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 6px 12px;
   font-size: 13px;
@@ -212,28 +164,44 @@ function markerNew(s: DiffStatus) {
     font-weight: 700;
     text-align: center;
     flex-shrink: 0;
+    margin-top: 1px;
   }
-  .diff-title { flex: 1; min-width: 0; }
+  .diff-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .diff-title { font-weight: 500; }
+  .diff-detail {
+    margin: 0;
+    line-height: 1.35;
+    opacity: 0.92;
+  }
 
   &.r-add {
     background: rgba(103,194,58,0.08);
     border-left-color: var(--color-success);
     color: #15803D;
-    font-weight: 500;
+    .diff-title { font-weight: 600; }
   }
   &.r-del {
     background: rgba(245,108,108,0.06);
     border-left-color: var(--color-danger);
     color: var(--color-danger);
-    text-decoration: line-through;
-    opacity: 0.85;
+    .diff-title { text-decoration: line-through; opacity: 0.85; }
   }
   &.r-edit {
     background: rgba(230,162,60,0.08);
     border-left-color: var(--color-warning);
     color: #B45309;
+    .diff-title { font-weight: 600; }
   }
-  &.r-same { color: var(--text-secondary); }
+  &.r-same {
+    color: var(--text-secondary);
+    .diff-title { font-weight: 400; }
+  }
 }
 html.dark {
   .diff-row.r-add  { color: #86EFAC; }

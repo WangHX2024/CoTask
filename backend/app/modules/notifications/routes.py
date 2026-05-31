@@ -3,7 +3,7 @@ from flask_smorest import Blueprint
 
 from ...common.permissions import current_user_id, require_auth
 from .schemas import NotificationItem, NotifyListQuery, ReadAllRequest
-from .service import list_notifications, mark_read, unread_count
+from .service import clear_all, list_notifications, mark_read, unread_count
 
 blp = Blueprint("notifications", "notifications", url_prefix="/api/notifications", description="通知中心")
 
@@ -34,4 +34,13 @@ class ReadAll(MethodView):
     @blp.response(204)
     def post(self, data):
         mark_read(current_user_id(), data.get("ids") or None)
+        return ""
+
+
+@blp.route("/clear")
+class ClearAll(MethodView):
+    @require_auth
+    @blp.response(204)
+    def post(self):
+        clear_all(current_user_id())
         return ""

@@ -237,7 +237,7 @@ import {
 import ThumbUpIcon from '@/components/common/ThumbUpIcon.vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import dayjs from 'dayjs'
+import { relativeTime as relTime } from '@/utils/datetime'
 import { Api, type Comment, type PostDetail, type TaskNode } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
@@ -407,19 +407,6 @@ const categories: Record<string, string> = {
 }
 function categoryLabel(c: string) {
   return categories[c] || c
-}
-
-function relTime(iso: string): string {
-  const t = dayjs(iso)
-  const now = dayjs()
-  const diffMin = now.diff(t, 'minute')
-  if (diffMin < 1) return '刚刚'
-  if (diffMin < 60) return `${diffMin} 分钟前`
-  const diffHr = now.diff(t, 'hour')
-  if (diffHr < 24) return `${diffHr} 小时前`
-  const diffD = now.diff(t, 'day')
-  if (diffD < 7) return `${diffD} 天前`
-  return t.format('YYYY-MM-DD')
 }
 
 const authorInitial = computed(() => {

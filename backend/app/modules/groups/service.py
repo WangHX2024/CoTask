@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 
 from ...common import audit
+from ...common.datetime_util import to_api_datetime
 from ...common.errors import BadRequest, Conflict, Forbidden, NotFound
 from ...common.permissions import invalidate_role_cache
 from ...common.tx import tx
@@ -52,15 +53,20 @@ def list_my_groups(uid: int):
     return out
 
 
+def group_average_progress(group_id: int) -> int:
+    """Overall completion: mean progress across all non-deleted tasks in the group."""
+    progress = db.session.execute(
+        db.select(func.avg(Task.progress)).where(
+            Task.group_id == group_id, Task.deleted_at.is_(None)
+        )
+    ).scalar_one() or 0
+    return int(progress)
+
+
 def _serialize_group(g: Group, role: str) -> dict:
     member_count = db.session.execute(
         db.select(func.count()).select_from(GroupMember).where(GroupMember.group_id == g.id)
     ).scalar_one()
-    progress = db.session.execute(
-        db.select(func.avg(Task.progress)).where(
-            Task.group_id == g.id, Task.is_leaf.is_(True), Task.deleted_at.is_(None)
-        )
-    ).scalar_one() or 0
     return {
         "id": g.id,
         "course_name": g.course_name,
@@ -69,10 +75,10 @@ def _serialize_group(g: Group, role: str) -> dict:
         "status": g.status,
         "description": g.description,
         "created_by": g.created_by,
-        "created_at": g.created_at,
+        "created_at": to_api_datetime(g.created_at),
         "role": role,
         "member_count": int(member_count),
-        "progress": int(progress),
+        "progress": group_average_progress(g.id),
     }
 
 
@@ -106,7 +112,7 @@ def update_group(uid: int, gid: int, data: dict) -> dict:
 def join_group(uid: int, invite_code: str) -> dict:
     g = db.session.execute(db.select(Group).where(Group.invite_code == invite_code)).scalar_one_or_none()
     if not g:
-        raise NotFound(message="邀请码不正确，请向组长核对后重试")
+        raise NotFound(message="邀请码不正确，请核对后重试")
     if g.status != "active":
         raise BadRequest("GROUP_INACTIVE", "该小组已暂停或解散，暂时无法加入")
     existing = db.session.execute(

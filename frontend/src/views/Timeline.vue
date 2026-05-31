@@ -1,9 +1,9 @@
 <template>
   <div class="timeline-page">
     <!-- Sticky toolbar — same pattern as ProjectTree -->
-    <header class="tl-toolbar">
-      <div class="tb-left">
-        <h1 class="tl-title">
+    <header class="ws-toolbar tl-toolbar">
+      <div class="ws-toolbar__left">
+        <h1 class="ws-toolbar__title">
           <span class="t-main">时间轴</span>
           <template v-if="group">
             <span class="t-sep">/</span>
@@ -12,38 +12,44 @@
             <span class="t-name">{{ group.name }}</span>
           </template>
         </h1>
-
-        <div class="view-switcher">
-          <el-button-group>
-            <el-button size="small" @click="goTree">
-              <el-icon><Files /></el-icon>&nbsp;项目树
-            </el-button>
-            <el-button size="small" type="primary">
-              <el-icon><Calendar /></el-icon>&nbsp;时间轴
-            </el-button>
-          </el-button-group>
-        </div>
+        <span class="ws-toolbar__sep" aria-hidden="true" />
+        <TreeTimelineSwitcher mode="timeline" :group-id="gid" />
       </div>
 
-      <div class="tb-right">
-        <!-- Date navigation -->
-        <el-button-group size="small">
-          <el-button :icon="ArrowLeft" @click="shiftDate(-1)" />
-          <el-button @click="goToday">今天</el-button>
-          <el-button :icon="ArrowRight" @click="shiftDate(1)" />
-        </el-button-group>
-        <el-date-picker
-          v-model="startDate"
-          type="date"
-          value-format="YYYY-MM-DD"
-          :clearable="false"
-          style="width: 148px"
-          @change="loadTimeline"
-        />
+      <div class="ws-toolbar__right">
+        <div class="tl-date-controls">
+          <div class="tl-date-nav" role="group" aria-label="日期导航">
+            <button
+              type="button"
+              class="ws-chip ws-chip--icon"
+              aria-label="上一段"
+              @click="shiftDate(-1)"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+            </button>
+            <button type="button" class="ws-chip" @click="goToday">今天</button>
+            <button
+              type="button"
+              class="ws-chip ws-chip--icon"
+              aria-label="下一段"
+              @click="shiftDate(1)"
+            >
+              <el-icon><ArrowRight /></el-icon>
+            </button>
+          </div>
+          <span class="ws-toolbar__sep ws-toolbar__sep--compact" aria-hidden="true" />
+          <el-date-picker
+            v-model="startDate"
+            class="tl-date-picker"
+            type="date"
+            value-format="YYYY-MM-DD"
+            :clearable="false"
+            @change="loadTimeline"
+          />
+        </div>
 
-        <div class="tb-divider" />
+        <span class="ws-toolbar__sep" aria-hidden="true" />
 
-        <!-- View -->
         <SegmentedControl
           v-model="view"
           size="sm"
@@ -51,40 +57,48 @@
           @change="onViewChange"
         />
 
-        <div class="tb-divider" />
+        <span class="ws-toolbar__sep" aria-hidden="true" />
 
-        <!-- Filter -->
-        <el-switch
-          v-model="onlyMine"
-          active-text="仅我的"
-          inline-prompt
-          style="--el-switch-on-color: var(--color-primary);"
-        />
+        <button
+          type="button"
+          class="ws-chip"
+          :class="{ 'is-active': onlyMine }"
+          :aria-pressed="onlyMine"
+          @click="onlyMine = !onlyMine"
+        >
+          <el-icon><Filter /></el-icon>
+          仅我的
+        </button>
 
-        <!-- Date range label -->
-        <span class="date-range-label">{{ dateRangeLabel }}</span>
+        <span class="ws-toolbar__sep" aria-hidden="true" />
+
+        <span
+          class="ws-meta-label tl-range-label"
+          :title="dateRangeLabel"
+        >{{ dateRangeLabel }}</span>
       </div>
     </header>
 
     <!-- Body -->
     <div class="tl-body">
       <!-- Gantt board -->
-      <section class="board-col card">
-        <div v-if="loading" class="loading-wrap">
+      <section class="tl-board">
+        <div v-if="loading" class="tl-board__state">
           <el-skeleton :rows="8" animated />
         </div>
         <template v-else-if="!filteredRows.length">
-          <el-empty description="此区间内没有任务" :image-size="120" />
+          <div class="tl-board__state">
+            <el-empty description="此区间内没有任务" :image-size="120" />
+          </div>
         </template>
-        <template v-else>
-          <GanttBoard
-            :rows="filteredRows"
-            :start="rangeStart"
-            :end="rangeEnd"
-            :view="view"
-            @blockClick="onBlockClick"
-          />
-        </template>
+        <GanttBoard
+          v-else
+          :rows="filteredRows"
+          :start="rangeStart"
+          :end="rangeEnd"
+          :view="view"
+          @blockClick="onBlockClick"
+        />
       </section>
 
       <!-- Side panel -->
@@ -110,7 +124,7 @@
             </li>
             <li>
               <span class="dot dot-urgent"></span>
-              <span>紧急 (虚线)</span>
+              <span>紧急任务</span>
             </li>
           </ul>
         </div>
@@ -135,28 +149,41 @@
               <b>{{ doneCount }}</b>
             </li>
             <li>
-              <span class="muted">阻塞</span>
+              <span class="muted">已阻塞</span>
               <b>{{ blockedCount }}</b>
             </li>
           </ul>
         </div>
       </aside>
     </div>
+
+    <TaskDrawer
+      v-model:visible="drawerOpen"
+      :node="treeStore.selected"
+      :members="members"
+      :group="group"
+      @select="onSelectNode"
+      @add-child="onAddChild"
+    />
   </div>
 </template>
 
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, Calendar, Files } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Filter } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { Api, type GroupRow, type TimelineResponse } from '@/api'
+import { Api, type GroupRow, type MemberInfo, type TimelineResponse } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
+import { useTreeStore } from '@/stores/tree'
+import { useWS } from '@/composables/useWS'
 import GanttBoard from '@/components/timeline/GanttBoard.vue'
+import TaskDrawer from '@/components/tree/TaskDrawer.vue'
 import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import TreeTimelineSwitcher from '@/components/common/TreeTimelineSwitcher.vue'
 
 const viewOptions = [
   { label: '周视图', value: 'week' as const },
@@ -167,9 +194,14 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const groupsStore = useGroupsStore()
+const treeStore = useTreeStore()
+const ws = useWS()
 
 const gid = computed(() => Number(route.params.gid))
 const group = computed(() => groupsStore.list.find((g) => g.id === gid.value) || null)
+
+const members = ref<MemberInfo[]>([])
+const drawerOpen = ref(false)
 
 const loading = ref(true)
 const view = ref<'week' | 'month'>('week')
@@ -181,7 +213,10 @@ const rangeEnd = ref<string>('')
 
 const dateRangeLabel = computed(() => {
   if (!rangeStart.value || !rangeEnd.value) return ''
-  return `${dayjs(rangeStart.value).format('YYYY-MM-DD')} ~ ${dayjs(rangeEnd.value).format('YYYY-MM-DD')}`
+  const s = dayjs(rangeStart.value)
+  const e = dayjs(rangeEnd.value)
+  const endFmt = s.year() === e.year() ? 'M月D日' : 'YYYY年M月D日'
+  return `${s.format('YYYY年M月D日')} — ${e.format(endFmt)}`
 })
 
 const filteredRows = computed<GroupRow[]>(() => {
@@ -228,8 +263,9 @@ async function loadTimeline() {
     rangeEnd.value =
       data.end ||
       dayjs(startDate.value)
-        .add(view.value === 'week' ? 7 : 30, 'day')
+        .add(view.value === 'week' ? 6 : 30, 'day')
         .format('YYYY-MM-DD')
+    if (data.start) startDate.value = data.start
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '加载时间轴失败')
   } finally {
@@ -252,24 +288,98 @@ function goToday() {
   void loadTimeline()
 }
 
-function goTree() {
-  router.push(`/groups/${gid.value}/tree`)
+async function ensureTreeLoaded(): Promise<boolean> {
+  if (!gid.value) return false
+  if (treeStore.groupId === gid.value && treeStore.nodes.length > 0) return true
+  try {
+    await treeStore.load(gid.value)
+    return true
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '加载任务数据失败')
+    return false
+  }
 }
 
-function onBlockClick(taskId: number) {
+async function onBlockClick(taskId: number) {
+  if (!(await ensureTreeLoaded())) return
+  if (!treeStore.byId.get(taskId)) {
+    ElMessage.warning('任务不存在或已删除')
+    return
+  }
+  treeStore.setSelected(taskId)
+  drawerOpen.value = true
+}
+
+function onSelectNode(id: number) {
+  treeStore.setSelected(id)
+  drawerOpen.value = true
+}
+
+function onAddChild(parentId: number) {
+  drawerOpen.value = false
   router.push({
     path: `/groups/${gid.value}/tree`,
-    query: { select: String(taskId) },
+    query: { select: String(parentId) },
   })
 }
 
-onMounted(() => {
-  void loadTimeline()
+async function refreshMembers() {
+  if (!gid.value) return
+  try {
+    members.value = await Api.members(gid.value)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '加载成员失败')
+  }
+}
+
+const unsubs: Array<() => void> = []
+
+onMounted(async () => {
+  if (!gid.value) return
+  groupsStore.setCurrent(gid.value)
+  if (!groupsStore.loaded) {
+    try { await groupsStore.refresh() } catch {}
+  }
+  await Promise.all([loadTimeline(), ensureTreeLoaded(), refreshMembers()])
+
+  const sel = Number(route.query.select)
+  if (sel && treeStore.byId.get(sel)) {
+    treeStore.setSelected(sel)
+    drawerOpen.value = true
+  }
+
+  unsubs.push(
+    ws.on('tree.updated', (data: unknown) => {
+      const d = data as { group_id?: number }
+      if (d?.group_id && Number(d.group_id) === gid.value) {
+        treeStore.applyWSPatch(data)
+        void loadTimeline()
+      }
+    }),
+  )
+  unsubs.push(
+    ws.on('task.status_changed', (data: unknown) => {
+      const d = data as { group_id?: number }
+      if (d?.group_id && Number(d.group_id) === gid.value) {
+        void treeStore.load(gid.value)
+        void loadTimeline()
+      }
+    }),
+  )
 })
 
-// reload if gid changes (group switch)
-watch(gid, (val, old) => {
-  if (val && val !== old) void loadTimeline()
+onUnmounted(() => {
+  for (const u of unsubs) {
+    try { u() } catch {}
+  }
+})
+
+watch(gid, async (val, old) => {
+  if (!val || val === old) return
+  groupsStore.setCurrent(val)
+  drawerOpen.value = false
+  treeStore.setSelected(0)
+  await Promise.all([loadTimeline(), ensureTreeLoaded(), refreshMembers()])
 })
 </script>
 
@@ -285,69 +395,14 @@ watch(gid, (val, old) => {
   overflow: hidden;
 }
 
-/* ---------- Sticky toolbar (identical pattern to ProjectTree) ---------- */
-.tl-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
-  height: 56px;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.tb-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.tb-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.tb-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--border-subtle);
-  flex-shrink: 0;
-  margin: 0 var(--space-1);
-}
-
-/* Breadcrumb title */
-.tl-title {
-  margin: 0;
-  font-size: var(--fs-base);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
+/* Fixed width so toolbar chips (e.g. 仅我的) do not shift when the range text changes */
+.tl-range-label {
+  flex: 0 0 12rem;
+  width: 12rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
-
-  .t-main   { color: var(--text-primary); }
-  .t-sep    { color: var(--text-tertiary); font-weight: 400; font-size: var(--fs-sm); }
-  .t-course { color: var(--color-primary); overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
-  .t-name   { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
-}
-
-.view-switcher { flex-shrink: 0; }
-
-.date-range-label {
-  font-size: var(--fs-sm);
-  color: var(--text-tertiary);
-  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ---------- Body (gantt + side panel) ---------- */
@@ -362,16 +417,24 @@ watch(gid, (val, old) => {
   align-items: start;
 }
 
-.board-col {
-  padding: var(--space-3);
+.tl-board {
   min-height: 480px;
   display: flex;
   flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
 
-  & > * {
-    flex: 1;
-    min-height: 0;
-  }
+.tl-board__state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  min-height: 360px;
 }
 
 .side-col {
@@ -417,7 +480,7 @@ watch(gid, (val, old) => {
   .dot-in_progress { background: var(--color-primary); }
   .dot-done        { background: var(--color-success); }
   .dot-blocked     { background: var(--color-danger); }
-  .dot-urgent      { background: transparent; border: 2px dashed var(--color-warning); }
+  .dot-urgent      { background: var(--color-warning); }
 }
 
 /* ---------- Stats ---------- */
@@ -448,8 +511,6 @@ watch(gid, (val, old) => {
   }
 }
 
-.loading-wrap { padding: var(--space-4); }
-
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {
   .tl-body { grid-template-columns: 1fr; }
@@ -462,9 +523,7 @@ watch(gid, (val, old) => {
 }
 
 @media (max-width: 768px) {
-  .tl-toolbar { height: auto; padding: var(--space-3) var(--space-4); }
-  .tb-left, .tb-right { flex-wrap: wrap; }
-  .tl-title .t-course, .tl-title .t-name { display: none; }
+  .ws-toolbar { padding: var(--space-3) var(--space-4); }
   .side-col { grid-template-columns: 1fr; }
 }
 </style>

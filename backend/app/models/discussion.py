@@ -13,11 +13,17 @@ class DiscussionChannel(db.Model):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     group_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("groups.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    task_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("tasks.id"), nullable=True
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    __table_args__ = (Index("idx_channels_group", "group_id"),)
+    __table_args__ = (
+        Index("idx_channels_group", "group_id"),
+        Index("uq_discussion_channels_group_task", "group_id", "task_id", unique=True),
+    )
 
 
 class DiscussionMessage(db.Model):

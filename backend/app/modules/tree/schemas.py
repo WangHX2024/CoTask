@@ -1,5 +1,7 @@
 from marshmallow import Schema, fields, validate
 
+from ...common.schemas import UTCDateTime
+
 
 class TaskNode(Schema):
     id = fields.Int()
@@ -18,6 +20,22 @@ class TaskNode(Schema):
     assignees = fields.List(fields.Int())
     dependencies = fields.List(fields.Int())
     version = fields.Int()
+    can_manage = fields.Bool()
+
+
+class NodePatchResponse(TaskNode):
+    """PATCH node — includes ancestor rows updated by status cascade."""
+    cascade = fields.List(fields.Nested(TaskNode), load_default=list)
+
+
+class NodeManagerInfo(Schema):
+    user_id = fields.Int()
+    granted_by = fields.Int()
+    granted_at = UTCDateTime()
+
+
+class GrantNodeManagerRequest(Schema):
+    user_id = fields.Int(required=True)
 
 
 class TreeResponse(Schema):

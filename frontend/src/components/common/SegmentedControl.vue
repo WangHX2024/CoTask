@@ -1,11 +1,13 @@
 <script setup lang="ts" generic="T extends string | number">
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick, type Component } from 'vue'
 
 export interface SegmentOption<V extends string | number = string> {
   label: string
   value: V
   /** Optional count badge (hidden when undefined or 0) */
   badge?: number | string
+  /** Optional leading icon (Element Plus icon component) */
+  icon?: Component
 }
 
 const props = withDefaults(
@@ -97,7 +99,10 @@ function select(value: T) {
       :aria-selected="opt.value === modelValue"
       @click="select(opt.value)"
     >
-      {{ opt.label }}
+      <el-icon v-if="opt.icon" class="segmented-control__icon" aria-hidden="true">
+        <component :is="opt.icon" />
+      </el-icon>
+      <span class="segmented-control__label">{{ opt.label }}</span>
       <span
         v-if="opt.badge != null && opt.badge !== 0"
         class="segmented-control__badge"
@@ -170,10 +175,20 @@ function select(value: T) {
   }
 }
 
+.segmented-control__icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.segmented-control__label {
+  line-height: 1.2;
+}
+
 .segmented-control--sm .segmented-control__btn {
-  padding: 5px 14px;
+  padding: 4px 12px;
   font-size: var(--fs-sm);
-  min-height: 26px;
+  min-height: 28px;
+  gap: 5px;
 }
 
 .segmented-control--md .segmented-control__btn {

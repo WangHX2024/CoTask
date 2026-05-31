@@ -159,7 +159,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, Phone, Share } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { formatDate } from '@/utils/datetime'
 import { Api, type GroupBrief, type MemberInfo } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
@@ -240,7 +240,7 @@ async function copyInviteCode() {
 }
 
 function formatJoin(iso: string) {
-  return dayjs(iso).format('YYYY-MM-DD')
+  return formatDate(iso)
 }
 
 async function onTransfer(m: MemberInfo) {

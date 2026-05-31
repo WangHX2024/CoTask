@@ -5,7 +5,7 @@ export interface PreviewTreeNode {
   children: PreviewTreeNode[]
 }
 
-/** Build an ordered tree from flat task nodes (supports multi-level branches and leaves). */
+/** Build an ordered tree from flat task nodes (multi-level branches and terminal nodes). */
 export function buildPreviewTree(nodes: TaskNode[]): PreviewTreeNode[] {
   if (!nodes.length) return []
 
@@ -33,9 +33,19 @@ export function buildPreviewTree(nodes: TaskNode[]): PreviewTreeNode[] {
   return roots
 }
 
+/** Nodes with no children in the tree (by parent_id links, not is_leaf flag). */
+export function countTerminalNodes(nodes: TaskNode[]): number {
+  if (!nodes.length) return 0
+  const parentIds = new Set<number>()
+  for (const n of nodes) {
+    if (n.parent_id != null) parentIds.add(n.parent_id)
+  }
+  return nodes.filter((n) => !parentIds.has(n.id)).length
+}
+
 export function previewTreeStats(nodes: TaskNode[]): string {
   if (!nodes.length) return ''
-  const leaves = nodes.filter((n) => n.is_leaf).length
+  const terminal = countTerminalNodes(nodes)
   const maxDepth = Math.max(...nodes.map((n) => n.depth))
-  return `${nodes.length} 个节点 · ${leaves} 个叶子 · ${maxDepth + 1} 层`
+  return `${nodes.length} 个节点 · ${terminal} 个末端任务 · ${maxDepth + 1} 层`
 }

@@ -41,19 +41,19 @@
           <el-icon><HomeFilled /></el-icon>
           <template #title>首页</template>
         </el-menu-item>
-        <el-menu-item :index="treeHref" :disabled="!groups.currentId">
+        <el-menu-item :index="treeHref" :disabled="!effectiveGroupId">
           <el-icon><Files /></el-icon>
           <template #title>项目树</template>
         </el-menu-item>
-        <el-menu-item :index="timelineHref" :disabled="!groups.currentId">
+        <el-menu-item :index="timelineHref" :disabled="!effectiveGroupId">
           <el-icon><Calendar /></el-icon>
           <template #title>时间轴</template>
         </el-menu-item>
-        <el-menu-item :index="filesHref" :disabled="!groups.currentId">
+        <el-menu-item :index="filesHref" :disabled="!effectiveGroupId">
           <el-icon><FolderOpened /></el-icon>
           <template #title>文件</template>
         </el-menu-item>
-        <el-menu-item :index="discussionHref" :disabled="!groups.currentId">
+        <el-menu-item :index="discussionHref" :disabled="!effectiveGroupId">
           <el-icon><ChatLineRound /></el-icon>
           <template #title>讨论</template>
         </el-menu-item>
@@ -61,10 +61,18 @@
           <el-icon><Star /></el-icon>
           <template #title>灵感广场</template>
         </el-menu-item>
-        <el-menu-item index="/notifications">
+        <el-menu-item index="/notifications" class="menu-item--notify">
           <el-icon><Bell /></el-icon>
           <template #title>
-            消息 <el-badge v-if="notify.unread" :value="notify.unread" class="msg-badge" />
+            <span class="menu-item-title">
+              <span>消息</span>
+              <el-badge
+                v-if="notify.unread"
+                :value="notify.unread"
+                :max="99"
+                class="msg-badge"
+              />
+            </span>
           </template>
         </el-menu-item>
         <el-menu-item index="/groups">
@@ -77,44 +85,12 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
-          <el-select
+          <GroupSelect
             v-if="groups.list.length"
+            :groups="groups.list"
             :model-value="groups.currentId"
-            class="group-select"
-            popper-class="group-select-popper"
-            placeholder="选择小组"
-            @change="onSwitchGroup"
-          >
-            <template #prefix>
-              <el-icon class="group-select-icon"><School /></el-icon>
-            </template>
-            <template v-if="currentGroup" #label>
-              <span class="group-select-value">
-                <span class="group-select-course">{{ currentGroup.course_name }}</span>
-                <span class="group-select-name">{{ currentGroup.name }}</span>
-                <span
-                  class="group-select-role"
-                  :class="currentGroup.role"
-                >{{ currentGroup.role === 'leader' ? '组长' : '组员' }}</span>
-              </span>
-            </template>
-            <el-option
-              v-for="g in groups.list"
-              :key="g.id"
-              :value="g.id"
-              :label="`${g.course_name} · ${g.name}`"
-            >
-              <div class="group-opt">
-                <span class="group-opt-text">
-                  <span class="group-opt-course">{{ g.course_name }}</span>
-                  <span class="group-opt-name">{{ g.name }}</span>
-                </span>
-                <span class="group-opt-role" :class="g.role">
-                  {{ g.role === 'leader' ? '组长' : '组员' }}
-                </span>
-              </div>
-            </el-option>
-          </el-select>
+            @update:model-value="onSwitchGroup"
+          />
           <el-button v-else type="primary" plain @click="router.push('/groups')">
             <el-icon><Plus /></el-icon>&nbsp;创建/加入小组
           </el-button>
@@ -164,11 +140,17 @@
         <router-view />
       </div>
     </main>
+
+    <OnboardingWizard
+      v-model="showOnboarding"
+      :initial-prefs="onboardingPrefs"
+      @completed="onOnboardingDone"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   HomeFilled, Files, Calendar, FolderOpened, ChatLineRound, Star, Bell,
@@ -181,6 +163,10 @@ import { useUIStore } from '@/stores/ui'
 import { useWS } from '@/composables/useWS'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import CoTaskLogo from '@/components/common/CoTaskLogo.vue'
+import GroupSelect from '@/components/common/GroupSelect.vue'
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
+import { Api } from '@/api'
+import { isOnboardingCompleted } from '@/utils/onboarding'
 
 const router = useRouter()
 const route = useRoute()
@@ -189,6 +175,9 @@ const groups = useGroupsStore()
 const notify = useNotifyStore()
 const ui = useUIStore()
 const ws = useWS()
+
+const showOnboarding = ref(false)
+const onboardingPrefs = ref<Record<string, unknown> | null>(null)
 
 const initials = computed(() =>
   (auth.user?.name || '').slice(0, 1) || 'C',
@@ -199,19 +188,25 @@ const active = computed(() => {
   if (route.path.startsWith('/inspiration')) return '/inspiration'
   return route.path
 })
-const treeHref = computed(() => `/groups/${groups.currentId}/tree`)
-const timelineHref = computed(() => `/groups/${groups.currentId}/timeline`)
-const filesHref = computed(() => `/groups/${groups.currentId}/files`)
-const discussionHref = computed(() => `/groups/${groups.currentId}/discussion`)
+/** Valid group id for nav links; 0 when user has no groups. */
+const effectiveGroupId = computed(() => {
+  if (!groups.list.length) return 0
+  if (groups.currentId && groups.list.some((g) => g.id === groups.currentId)) {
+    return groups.currentId
+  }
+  return groups.list[0].id
+})
 
-const currentGroup = computed(() =>
-  groups.list.find((g) => g.id === groups.currentId) ?? null,
-)
+const treeHref = computed(() => `/groups/${effectiveGroupId.value}/tree`)
+const timelineHref = computed(() => `/groups/${effectiveGroupId.value}/timeline`)
+const filesHref = computed(() => `/groups/${effectiveGroupId.value}/files`)
+const discussionHref = computed(() => `/groups/${effectiveGroupId.value}/discussion`)
 
 function onSelect(idx: string) {
   if (idx) router.push(idx)
 }
-function onSwitchGroup(gid: number) {
+function onSwitchGroup(gid: number | null) {
+  if (gid == null) return
   groups.setCurrent(gid)
   const m = route.path.match(/^\/groups\/(\d+)\/(\w+)/)
   if (m) router.push(`/groups/${gid}/${m[2]}`)
@@ -226,11 +221,31 @@ async function onUserCmd(cmd: string) {
   else if (cmd === 'groups') router.push('/groups')
 }
 
+async function maybeOpenOnboarding() {
+  try {
+    const me = await Api.me()
+    onboardingPrefs.value = (me.prefs as Record<string, unknown>) || {}
+    if (!isOnboardingCompleted(onboardingPrefs.value)) {
+      showOnboarding.value = true
+    }
+  } catch {
+    // ignore — user can complete onboarding from profile later
+  }
+}
+
+function onOnboardingDone() {
+  onboardingPrefs.value = {
+    ...(onboardingPrefs.value || {}),
+    onboarding: { completed: true },
+  }
+}
+
 onMounted(async () => {
   try {
     if (auth.isAuthed && !auth.user) await auth.fetchMe()
     await groups.refresh()
     void notify.refresh()
+    void maybeOpenOnboarding()
     ws.connect()
     ws.on('notification.new', (data) => {
       notify.push({
@@ -243,9 +258,11 @@ onMounted(async () => {
   } catch {}
 })
 
-// route → currentId sync
+// route → currentId sync (only for groups the user belongs to)
 watch(() => route.params.gid, (gid) => {
-  if (gid) groups.setCurrent(Number(gid))
+  if (!gid) return
+  const n = Number(gid)
+  if (groups.hasGroup(n)) groups.setCurrent(n)
 })
 </script>
 
@@ -448,7 +465,32 @@ watch(() => route.params.gid, (gid) => {
 
 }
 
-.msg-badge { margin-left: var(--space-2); }
+/* Unread count beside menu title (inline pill, not floating on icon) */
+.menu :deep(.menu-item--notify) {
+  .menu-item-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    line-height: 1;
+    vertical-align: middle;
+  }
+
+  .msg-badge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    line-height: 1;
+    vertical-align: middle;
+
+    .el-badge__content {
+      position: static;
+      transform: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+}
 
 /* ---------- Main area ---------- */
 .main {
@@ -533,131 +575,6 @@ watch(() => route.params.gid, (gid) => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-}
-
-/* ---------- Topbar group switcher ---------- */
-.group-select {
-  width: min(320px, 42vw);
-
-  :deep(.el-select__wrapper) {
-    min-height: 36px;
-    padding: 0 var(--space-3) 0 var(--space-2);
-    background: var(--bg-soft) !important;
-    border-radius: var(--control-radius-line) !important;
-    box-shadow: none !important;
-    transition: background 120ms ease, box-shadow 120ms ease;
-
-    &:hover {
-      background: var(--bg-overlay) !important;
-      box-shadow: none !important;
-    }
-
-    &.is-focused,
-    &.is-focus,
-    &:focus-within {
-      background: var(--bg-card) !important;
-      box-shadow: 0 0 0 1px var(--color-primary) inset !important;
-    }
-  }
-
-  :deep(.el-select__selection) {
-    min-width: 0;
-  }
-
-  :deep(.el-select__selected-item) {
-    overflow: hidden;
-  }
-
-  :deep(.el-select__caret) {
-    color: var(--text-tertiary);
-  }
-}
-
-.group-select-icon {
-  color: var(--color-primary);
-  font-size: 16px;
-}
-
-.group-select-value {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  max-width: 100%;
-}
-
-.group-select-course {
-  flex-shrink: 0;
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-}
-
-.group-select-name {
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.group-select-role {
-  flex-shrink: 0;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  line-height: 1.4;
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--bg-card);
-  color: var(--text-tertiary);
-
-  &.leader {
-    background: rgba(245, 158, 11, 0.14);
-    color: #B45309;
-  }
-}
-
-.group-opt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-1) 0;
-}
-
-.group-opt-text {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.group-opt-course {
-  flex-shrink: 0;
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-}
-
-.group-opt-name {
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.group-opt-role {
-  flex-shrink: 0;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--bg-soft);
-  color: var(--text-tertiary);
-
-  &.leader {
-    background: rgba(245, 158, 11, 0.14);
-    color: #B45309;
   }
 }
 

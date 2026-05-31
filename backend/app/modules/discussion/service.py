@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
+from ...common.datetime_util import to_api_datetime
 from ...common.errors import BadRequest, NotFound
 from ...common.tx import tx
 from ...extensions import db
@@ -14,27 +15,143 @@ from ...models import (
 )
 from ..notifications.service import push_ws
 
-
-def list_channels(gid: int) -> list[dict]:
-    rows = db.session.execute(
-        select(DiscussionChannel).where(DiscussionChannel.group_id == gid)
-        .order_by(DiscussionChannel.created_at.asc())
-    ).scalars().all()
-    if not rows:
-        # auto-create #全员 channel
-        return []
-    return [
-        {"id": c.id, "name": c.name, "created_by": c.created_by, "created_at": c.created_at}
-        for c in rows
-    ]
+GROUP_CHANNEL_NAME = "全员"
 
 
-def create_channel(uid: int, gid: int, name: str) -> dict:
+def _serialize_channel(c: DiscussionChannel) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "task_id": c.task_id,
+        "created_by": c.created_by,
+        "created_at": to_api_datetime(c.created_at),
+    }
+
+
+def build_task_channel_name(group_id: int, task_id: int) -> str:
+    """Task path only, e.g. 读书报告 / 讲稿撰写 (no course or group name)."""
+    t = db.session.get(Task, task_id)
+    if not t or t.group_id != group_id:
+        return "任务讨论"
+    parts: list[str] = []
+    if t.path:
+        for seg in t.path.strip("/").split("/"):
+            if not seg.isdigit():
+                continue
+            node = db.session.get(Task, int(seg))
+            if node and node.title:
+                title = node.title.strip()
+                if title and (not parts or parts[-1] != title):
+                    parts.append(title)
+    elif t.title:
+        parts.append(t.title.strip())
+    name = " / ".join(parts) if parts else (t.title or "任务讨论")
+    return name[:256]
+
+
+def _ensure_group_channel(uid: int, gid: int) -> DiscussionChannel | None:
+    row = db.session.execute(
+        select(DiscussionChannel).where(
+            DiscussionChannel.group_id == gid,
+            DiscussionChannel.task_id.is_(None),
+            DiscussionChannel.name == GROUP_CHANNEL_NAME,
+        )
+    ).scalar_one_or_none()
+    if row:
+        return row
     with tx() as s:
-        c = DiscussionChannel(group_id=gid, name=name, created_by=uid)
+        c = DiscussionChannel(
+            group_id=gid,
+            name=GROUP_CHANNEL_NAME,
+            task_id=None,
+            created_by=uid,
+        )
         s.add(c)
         s.flush()
-    return {"id": c.id, "name": c.name, "created_by": c.created_by, "created_at": c.created_at}
+    return c
+
+
+def list_channels(gid: int, uid: int) -> list[dict]:
+    rows = db.session.execute(
+        select(DiscussionChannel)
+        .where(DiscussionChannel.group_id == gid)
+        .order_by(
+            DiscussionChannel.task_id.is_(None).desc(),
+            DiscussionChannel.created_at.asc(),
+        )
+    ).scalars().all()
+    if not any(c.task_id is None and c.name == GROUP_CHANNEL_NAME for c in rows):
+        _ensure_group_channel(uid, gid)
+        rows = db.session.execute(
+            select(DiscussionChannel)
+            .where(DiscussionChannel.group_id == gid)
+            .order_by(
+                DiscussionChannel.task_id.is_(None).desc(),
+                DiscussionChannel.created_at.asc(),
+            )
+        ).scalars().all()
+    return [_serialize_channel(c) for c in rows]
+
+
+def create_channel(uid: int, gid: int, name: str, task_id: int | None = None) -> dict:
+    name = (name or "").strip()
+    if task_id:
+        pass
+    elif not name:
+        raise BadRequest("MISSING_NAME", "需指定频道名称")
+    if task_id:
+        t = db.session.get(Task, task_id)
+        if not t or t.group_id != gid or t.deleted_at:
+            raise NotFound("task")
+        existing = db.session.execute(
+            select(DiscussionChannel).where(
+                DiscussionChannel.group_id == gid,
+                DiscussionChannel.task_id == task_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return _serialize_channel(existing)
+        name = name or build_task_channel_name(gid, task_id)
+    if len(name) > 256:
+        name = name[:253] + "..."
+    with tx() as s:
+        c = DiscussionChannel(
+            group_id=gid,
+            name=name,
+            task_id=task_id,
+            created_by=uid,
+        )
+        s.add(c)
+        s.flush()
+    return _serialize_channel(c)
+
+
+def get_or_create_task_channel(uid: int, gid: int, task_id: int) -> dict:
+    t = db.session.get(Task, task_id)
+    if not t or t.group_id != gid or t.deleted_at:
+        raise NotFound("task")
+    existing = db.session.execute(
+        select(DiscussionChannel).where(
+            DiscussionChannel.group_id == gid,
+            DiscussionChannel.task_id == task_id,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        return _serialize_channel(existing)
+    return create_channel(uid, gid, "", task_id=task_id)
+
+
+def channel_message_count(channel_id: int) -> int:
+    from sqlalchemy import func
+
+    return db.session.execute(
+        select(func.count())
+        .select_from(DiscussionMessage)
+        .where(
+            DiscussionMessage.channel_id == channel_id,
+            DiscussionMessage.deleted_at.is_(None),
+        )
+    ).scalar_one()
 
 
 def post_message(uid: int, gid: int, data: dict) -> dict:
@@ -56,7 +173,7 @@ def post_message(uid: int, gid: int, data: dict) -> dict:
             task_id=task_id,
             author_id=uid,
             body=data["body"],
-            anon=bool(data.get("anon")),
+            anon=False,
             quote_id=data.get("quote_id"),
         )
         s.add(m)
@@ -82,7 +199,6 @@ def list_messages(uid: int, gid: int, channel_id: int | None = None, task_id: in
 
 def _serialize(m: DiscussionMessage) -> dict:
     if m.anon:
-        # find anon_id in group_members for this user
         mem = None
         if m.channel_id:
             ch = db.session.get(DiscussionChannel, m.channel_id)
@@ -121,5 +237,5 @@ def _serialize(m: DiscussionMessage) -> dict:
         "author_avatar": avatar,
         "anon": m.anon,
         "quote_id": m.quote_id,
-        "created_at": m.created_at,
+        "created_at": to_api_datetime(m.created_at),
     }

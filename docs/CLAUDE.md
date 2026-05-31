@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Key design decisions
 
-- **Project tree**: adjacency list (`parent_id`) + **materialized path** (`path`) + **closure table** (`task_closure`). Only leaves (`is_leaf=true`) carry `start_date`/`end_date`; non-leaf progress is aggregated from descendants via the closure table.
+- **Project tree**: adjacency list (`parent_id`) + **materialized path** (`path`) + **closure table** (`task_closure`). Any node may have dates, assignees, and children; DB `is_leaf` is derived from “has no children” for legacy queries only (UI does not use “leaf” wording). **Subtree managers** (`task_node_managers`) plus group **leader** get `can_manage` on a node and all descendants (`backend/app/common/task_permissions.py`).
 - **Group-scoped roles**: a user has a (leader/member) role per group via `group_members(group_id, user_id, role)`. The `@require_group_role` decorator (in `backend/app/common/permissions.py`) is the only auth gate for group-scoped endpoints.
 - **AI**: provider-agnostic (`backend/app/modules/ai/client.py`) — Claude → OpenAI → DeepSeek → Dashscope fallback. All LLM calls run as Celery jobs (`backend/app/tasks/ai_tasks.py`). Output is strictly validated via Pydantic schemas (`backend/app/modules/ai/schemas.py`).
 - **Inspiration plaza templates** are stored as **detached subtrees** in the same `tasks` table (`group_id=NULL`), referenced by `inspiration_posts.template_root_id`. Importing a template deep-copies into the target group.

@@ -14,8 +14,19 @@ from typing import Iterable
 from sqlalchemy import func, select
 
 from ...common import audit
-from ...common.errors import BadRequest, Conflict, NotFound
+from ...common.errors import BadRequest, Conflict, Forbidden, NotFound
+from ...common.task_permissions import (
+    assert_can_create_under_parent,
+    assert_can_manage_task,
+    can_manage_task,
+    grant_node_manager,
+    list_node_managers,
+    managed_task_ids,
+    revoke_node_manager,
+    sync_subtree_managers_from_assignees,
+)
 from ...common.tx import tx
+from ..notifications.service import push_ws
 from ...extensions import db
 from ...models import (
     GroupMember,
@@ -148,9 +159,108 @@ def _bump_versions(task_ids: list[int]):
 
 # ---------- progress aggregation ----------
 
+TASK_STATUS = frozenset({"todo", "in_progress", "done", "blocked"})
 
-def _recompute_ancestors_progress(task_id: int):
-    """Walk from `task_id` up the tree; for each non-leaf, recompute progress from children."""
+
+def _clamp_progress_for_status(progress: int, status: str) -> int:
+    """Progress 100 is reserved for status=done."""
+    progress = max(0, min(100, int(progress or 0)))
+    if status == "done":
+        return 100
+    if status in ("todo", "blocked"):
+        return 0
+    # in_progress
+    if progress >= 100:
+        return 99
+    return progress
+
+
+def _progress_for_status(status: str, current: int = 0) -> int:
+    """Map a manual status change to a progress percentage."""
+    if status == "done":
+        return 100
+    if status == "todo":
+        return 0
+    if status == "blocked":
+        return 0
+    if status == "in_progress":
+        p = int(current or 0)
+        if p >= 100:
+            return 30
+        if p > 0:
+            return p
+        return 30
+    return max(0, min(100, int(current or 0)))
+
+
+def _aggregate_from_children(children: list[Task]) -> tuple[int, str]:
+    """Derive parent progress + status from direct children only."""
+    if not children:
+        return 0, "todo"
+    statuses = [c.status for c in children]
+    progresses = [int(c.progress or 0) for c in children]
+    if any(s == "blocked" for s in statuses):
+        avg = sum(progresses) // len(children)
+        return avg, "blocked"
+    if all(s == "done" for s in statuses):
+        return 100, "done"
+    if all(s == "todo" for s in statuses):
+        return 0, "todo"
+    avg = sum(progresses) // len(children)
+    if avg >= 100:
+        return 100, "done"
+    if avg <= 0:
+        return 0, "todo"
+    return avg, "in_progress"
+
+
+def task_has_children(task_id: int) -> bool:
+    """True when the task has at least one non-deleted direct child."""
+    return (
+        db.session.execute(
+            select(func.count())
+            .select_from(Task)
+            .where(Task.parent_id == task_id, Task.deleted_at.is_(None))
+        ).scalar_one()
+        > 0
+    )
+
+
+def parent_ids_with_children(task_ids: list[int]) -> set[int]:
+    if not task_ids:
+        return set()
+    rows = db.session.execute(
+        select(Task.parent_id)
+        .where(Task.parent_id.in_(task_ids), Task.deleted_at.is_(None))
+        .distinct()
+    ).scalars().all()
+    return set(rows)
+
+
+def assert_status_change_allowed(task_id: int) -> None:
+    if task_has_children(task_id):
+        raise BadRequest(
+            "HAS_CHILDREN",
+            "存在子任务的任务不可单独修改状态，请通过子任务推进",
+        )
+
+
+def _sync_is_leaf_flag(task_id: int) -> None:
+    """Display hint only: true when the node has no active children."""
+    t = db.session.get(Task, task_id)
+    if not t or t.deleted_at:
+        return
+    child_count = db.session.execute(
+        select(func.count())
+        .select_from(Task)
+        .where(Task.parent_id == task_id, Task.deleted_at.is_(None))
+    ).scalar_one()
+    t.is_leaf = child_count == 0
+
+
+def _recompute_ancestors_progress(task_id: int) -> list[int]:
+    """Walk from changed node up; recompute each parent's progress/status from children."""
+    updated_ids: list[int] = []
     ancestor_ids = [
         r.ancestor_id
         for r in db.session.execute(
@@ -165,29 +275,37 @@ def _recompute_ancestors_progress(task_id: int):
         ).scalars().all()
         if not children:
             continue
-        total = sum(c.progress for c in children)
-        avg = total // len(children)
         parent = db.session.get(Task, aid)
+        if not parent or parent.deleted_at:
+            continue
+        avg, stat = _aggregate_from_children(children)
+        avg = _clamp_progress_for_status(avg, stat)
+        if parent.progress == avg and parent.status == stat:
+            continue
         parent.progress = avg
-        if avg == 100:
-            parent.status = "done"
-        elif avg == 0:
-            parent.status = "todo"
-        else:
-            parent.status = "in_progress"
+        parent.status = stat
+        parent.version += 1
+        updated_ids.append(aid)
+    return updated_ids
 
 
 # ---------- public API ----------
 
 
-def _serialize_task(t: Task, assignees: list[int] | None = None,
-                   dependencies: list[int] | None = None) -> dict:
+def _serialize_task(
+    t: Task,
+    assignees: list[int] | None = None,
+    dependencies: list[int] | None = None,
+    *,
+    can_manage: bool | None = None,
+) -> dict:
     return {
         "id": t.id,
         "parent_id": t.parent_id,
         "title": t.title,
         "description": t.description or "",
         "is_leaf": t.is_leaf,
+        "can_manage": can_manage if can_manage is not None else False,
         "refined": t.refined,
         "start_date": t.start_date,
         "end_date": t.end_date,
@@ -220,7 +338,7 @@ def _deps_of(task_id: int) -> list[int]:
     ]
 
 
-def get_tree(group_id: int) -> dict:
+def get_tree(group_id: int, actor_id: int | None = None) -> dict:
     rows = db.session.execute(
         select(Task)
         .where(Task.group_id == group_id, Task.deleted_at.is_(None))
@@ -241,7 +359,16 @@ def get_tree(group_id: int) -> dict:
     d_map: dict[int, list[int]] = {}
     for d in deps:
         d_map.setdefault(d.task_id, []).append(d.depends_on)
-    nodes = [_serialize_task(t, a_map.get(t.id, []), d_map.get(t.id, [])) for t in rows]
+    managed = managed_task_ids(actor_id, group_id) if actor_id is not None else None
+    nodes = [
+        _serialize_task(
+            t,
+            a_map.get(t.id, []),
+            d_map.get(t.id, []),
+            can_manage=managed is None or t.id in managed,
+        )
+        for t in rows
+    ]
     version = max(t.version for t in rows)
     return {"group_id": group_id, "version": version, "nodes": nodes}
 
@@ -253,15 +380,17 @@ def create_node(group_id: int, actor_id: int, data: dict) -> dict:
         parent = db.session.get(Task, parent_id)
         if not parent or parent.group_id != group_id or parent.deleted_at:
             raise BadRequest("BAD_PARENT", "父节点不存在")
+    assert_can_create_under_parent(actor_id, group_id, parent_id)
     assignees = data.get("assignees") or []
     _ensure_member(group_id, assignees)
-    is_leaf = bool(data.get("is_leaf"))
-    if is_leaf and (not data.get("start_date") or not data.get("end_date")):
-        # default to 7 days from today
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    if start_date and not end_date:
         from datetime import timedelta
-        today = date.today()
-        data["start_date"] = data.get("start_date") or today
-        data["end_date"] = data.get("end_date") or today + timedelta(days=7)
+
+        end_date = start_date + timedelta(days=7) if isinstance(start_date, date) else end_date
+    if end_date and not start_date:
+        start_date = end_date
 
     pos = data.get("position")
     if pos is None:
@@ -276,9 +405,9 @@ def create_node(group_id: int, actor_id: int, data: dict) -> dict:
             parent_id=parent_id,
             title=data["title"],
             description=data.get("description", ""),
-            is_leaf=is_leaf,
-            start_date=data.get("start_date") if is_leaf else None,
-            end_date=data.get("end_date") if is_leaf else None,
+            is_leaf=True,
+            start_date=start_date,
+            end_date=end_date,
             position=pos,
             depth=(parent.depth + 1) if parent else 0,
             path="/",  # placeholder; updated post-flush
@@ -287,39 +416,64 @@ def create_node(group_id: int, actor_id: int, data: dict) -> dict:
         s.flush()
         t.path = _path_of(parent, t.id)
         _insert_closure_for_new(t.id, parent_id)
+        _sync_is_leaf_flag(t.id)
         if parent:
-            # parent is no longer a leaf
-            if parent.is_leaf:
-                parent.is_leaf = False
-                parent.start_date = None
-                parent.end_date = None
+            _sync_is_leaf_flag(parent.id)
         for uid in assignees:
             s.add(TaskAssignment(task_id=t.id, user_id=uid))
+        sync_subtree_managers_from_assignees(actor_id, group_id, t.id, assignees)
         audit.record(actor_id, "tree.create_node", group_id=group_id,
                      target_type="task", target_id=t.id, payload={"title": t.title})
-    return _serialize_task(t)
+    return _serialize_task(t, can_manage=True)
+
+
+def _can_assignee_update_status(actor_id: int, group_id: int, task_id: int, data: dict) -> bool:
+    if can_manage_task(actor_id, group_id, task_id):
+        return False
+    allowed = {"status", "expected_version"}
+    extra = set(data.keys()) - allowed
+    if extra:
+        return False
+    return actor_id in _assignees_of(task_id)
 
 
 def update_node(group_id: int, actor_id: int, task_id: int, data: dict) -> dict:
     t = db.session.get(Task, task_id)
     if not t or t.group_id != group_id or t.deleted_at:
         raise NotFound("task")
+    if not can_manage_task(actor_id, group_id, task_id) and not _can_assignee_update_status(
+        actor_id, group_id, task_id, data
+    ):
+        raise Forbidden("无权编辑该任务")
     expected = data.get("expected_version")
     if expected is not None and expected != t.version:
         raise Conflict("VERSION_CONFLICT", "节点已被他人修改", detail={"current": t.version})
     new_assignees = data.pop("assignees", None)
     new_deps = data.pop("dependencies", None)
     data.pop("expected_version", None)
+    if new_assignees is not None and not can_manage_task(actor_id, group_id, task_id):
+        raise Forbidden("仅节点管理员可调整负责人")
+    if new_deps is not None and not can_manage_task(actor_id, group_id, task_id):
+        raise Forbidden("仅节点管理员可调整依赖")
+    cascade_ids: list[int] = []
+    nullable_date_fields = frozenset({"start_date", "end_date"})
     with tx() as s:
         for k, v in data.items():
-            if v is not None and hasattr(t, k):
-                setattr(t, k, v)
+            if not hasattr(t, k):
+                continue
+            # Allow explicit null to clear DDL; other None values are ignored.
+            if v is None and k not in nullable_date_fields:
+                continue
+            setattr(t, k, v)
         t.version += 1
         if new_assignees is not None:
             _ensure_member(group_id, new_assignees)
             s.execute(db.delete(TaskAssignment).where(TaskAssignment.task_id == task_id))
             for uid in new_assignees:
                 s.add(TaskAssignment(task_id=task_id, user_id=uid))
+            sync_subtree_managers_from_assignees(
+                actor_id, group_id, task_id, new_assignees
+            )
         if new_deps is not None:
             s.execute(db.delete(TaskDependency).where(TaskDependency.task_id == task_id))
             for d in new_deps:
@@ -328,21 +482,42 @@ def update_node(group_id: int, actor_id: int, task_id: int, data: dict) -> dict:
                 s.add(TaskDependency(task_id=task_id, depends_on=d))
         audit.record(actor_id, "tree.update_node", group_id=group_id,
                      target_type="task", target_id=task_id, payload=data)
-        if "status" in data and t.is_leaf:
-            t.progress = 100 if data["status"] == "done" else (0 if data["status"] == "todo" else t.progress or 50)
-            _recompute_ancestors_progress(task_id)
-    return _serialize_task(t)
+        if "status" in data:
+            new_status = data["status"]
+            if new_status not in TASK_STATUS:
+                raise BadRequest("BAD_STATUS", "无效的状态")
+            if new_status != t.status:
+                assert_status_change_allowed(task_id)
+            t.progress = _progress_for_status(new_status, t.progress or 0)
+            cascade_ids = _recompute_ancestors_progress(task_id)
+            push_ws(group_id, "tree.updated", {"group_id": group_id})
+    result = _serialize_task(t, can_manage=can_manage_task(actor_id, group_id, task_id))
+    if cascade_ids:
+        managed = managed_task_ids(actor_id, group_id)
+        result["cascade"] = [
+            _serialize_task(
+                p,
+                can_manage=managed is None or p.id in managed,
+            )
+            for aid in cascade_ids
+            if (p := db.session.get(Task, aid)) and not p.deleted_at
+        ]
+    return result
 
 
 def delete_node(group_id: int, actor_id: int, task_id: int):
     t = db.session.get(Task, task_id)
     if not t or t.group_id != group_id:
         raise NotFound("task")
-    from datetime import datetime
+    assert_can_manage_task(actor_id, group_id, task_id)
+    from ...common.datetime_util import utc_now
+
+    parent_id = t.parent_id
     with tx() as s:
         desc_ids = _all_descendants(task_id)
-        s.execute(db.update(Task).where(Task.id.in_(desc_ids)).values(deleted_at=datetime.utcnow()))
-        if t.parent_id:
+        s.execute(db.update(Task).where(Task.id.in_(desc_ids)).values(deleted_at=utc_now()))
+        if parent_id:
+            _sync_is_leaf_flag(parent_id)
             _recompute_ancestors_progress(task_id)
         audit.record(actor_id, "tree.delete_node", group_id=group_id,
                      target_type="task", target_id=task_id,
@@ -354,6 +529,10 @@ def move_node(group_id: int, actor_id: int, task_id: int, new_parent_id: int | N
     t = db.session.get(Task, task_id)
     if not t or t.group_id != group_id:
         raise NotFound("task")
+    assert_can_manage_task(actor_id, group_id, task_id)
+    if new_parent_id is not None:
+        assert_can_create_under_parent(actor_id, group_id, new_parent_id)
+    old_parent_id = t.parent_id
     if new_parent_id == task_id or new_parent_id in _all_descendants(task_id):
         raise BadRequest("CYCLE", "不能移动到自己的子孙下")
     new_parent = db.session.get(Task, new_parent_id) if new_parent_id else None
@@ -371,10 +550,86 @@ def move_node(group_id: int, actor_id: int, task_id: int, new_parent_id: int | N
             ).scalar_one() or -1) + 1
         _attach_subtree_closure(task_id, new_parent_id)
         _rebuild_paths(task_id)
+        _sync_is_leaf_flag(task_id)
+        if old_parent_id:
+            _sync_is_leaf_flag(old_parent_id)
+        if new_parent_id:
+            _sync_is_leaf_flag(new_parent_id)
         _recompute_ancestors_progress(task_id)
         audit.record(actor_id, "tree.move_node", group_id=group_id,
                      target_type="task", target_id=task_id,
                      payload={"new_parent_id": new_parent_id})
+
+
+def task_path_keywords(group_id: int, task_id: int) -> list[str]:
+    t = db.session.get(Task, task_id)
+    if not t or t.group_id != group_id or t.deleted_at:
+        raise NotFound("task")
+    titles: list[str] = []
+    if t.path:
+        for seg in t.path.strip("/").split("/"):
+            if not seg.isdigit():
+                continue
+            node = db.session.get(Task, int(seg))
+            if node and node.title:
+                title = node.title.strip()
+                if title and (not titles or titles[-1] != title):
+                    titles.append(title)
+    elif t.title:
+        titles.append(t.title.strip())
+    return titles
+
+
+def get_related_inspiration(group_id: int, task_id: int, viewer_id: int) -> dict:
+    from ..inspiration.service import related_posts_union
+
+    keywords = task_path_keywords(group_id, task_id)
+    return related_posts_union(viewer_id, keywords, limit=12)
+
+
+def get_node_managers(group_id: int, task_id: int) -> list[dict]:
+    t = db.session.get(Task, task_id)
+    if not t or t.group_id != group_id or t.deleted_at:
+        raise NotFound("task")
+    return list_node_managers(group_id, task_id)
+
+
+def add_node_manager(group_id: int, actor_id: int, task_id: int, user_id: int) -> dict:
+    """Legacy API: adds assignee (assignee = subtree manager)."""
+    t = db.session.get(Task, task_id)
+    if not t or t.group_id != group_id or t.deleted_at:
+        raise NotFound("task")
+    assert_can_manage_task(actor_id, group_id, task_id)
+    ids = list(_assignees_of(task_id))
+    if user_id not in ids:
+        ids.append(user_id)
+    with tx() as s:
+        _ensure_member(group_id, ids)
+        s.execute(db.delete(TaskAssignment).where(TaskAssignment.task_id == task_id))
+        for uid in ids:
+            s.add(TaskAssignment(task_id=task_id, user_id=uid))
+        sync_subtree_managers_from_assignees(actor_id, group_id, task_id, ids)
+        t.version += 1
+    row = list_node_managers(group_id, task_id)
+    for m in row:
+        if m["user_id"] == user_id:
+            return m
+    return grant_node_manager(actor_id, group_id, task_id, user_id)
+
+
+def remove_node_manager(group_id: int, actor_id: int, task_id: int, user_id: int) -> None:
+    """Legacy API: removes assignee."""
+    t = db.session.get(Task, task_id)
+    if not t or t.group_id != group_id or t.deleted_at:
+        raise NotFound("task")
+    assert_can_manage_task(actor_id, group_id, task_id)
+    ids = [u for u in _assignees_of(task_id) if u != user_id]
+    with tx() as s:
+        s.execute(db.delete(TaskAssignment).where(TaskAssignment.task_id == task_id))
+        for uid in ids:
+            s.add(TaskAssignment(task_id=task_id, user_id=uid))
+        sync_subtree_managers_from_assignees(actor_id, group_id, task_id, ids)
+        t.version += 1
 
 
 def replace_tree(group_id: int, actor_id: int, payload: dict) -> dict:
@@ -388,14 +643,14 @@ def replace_tree(group_id: int, actor_id: int, payload: dict) -> dict:
     if expected is not None and cur and expected != cur:
         raise Conflict("VERSION_CONFLICT", "项目树版本不一致", detail={"current": cur})
 
-    from datetime import datetime
+    from ...common.datetime_util import utc_now
 
     with tx() as s:
         # Soft-delete existing
         s.execute(
             db.update(Task).where(
                 Task.group_id == group_id, Task.deleted_at.is_(None)
-            ).values(deleted_at=datetime.utcnow())
+            ).values(deleted_at=utc_now())
         )
 
         new_ids: list[int] = []
@@ -406,7 +661,7 @@ def replace_tree(group_id: int, actor_id: int, payload: dict) -> dict:
                 parent_id=parent_id,
                 title=node_data["title"][:256],
                 description=node_data.get("description", ""),
-                is_leaf=bool(node_data.get("is_leaf", False)) or not node_data.get("children"),
+                is_leaf=not (node_data.get("children") or []),
                 start_date=node_data.get("start_date"),
                 end_date=node_data.get("end_date"),
                 position=position,

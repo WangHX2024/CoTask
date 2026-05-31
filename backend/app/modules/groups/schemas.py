@@ -1,5 +1,7 @@
 from marshmallow import Schema, fields, validate
 
+from ...common.schemas import UTCDateTime
+
 
 class GroupCreate(Schema):
     course_name = fields.Str(required=True, validate=validate.Length(min=1, max=128))
@@ -21,7 +23,7 @@ class GroupBrief(Schema):
     status = fields.Str()
     description = fields.Str()
     created_by = fields.Int()
-    created_at = fields.DateTime()
+    created_at = UTCDateTime()
     role = fields.Str()
     member_count = fields.Int()
     progress = fields.Int()
@@ -37,7 +39,7 @@ class MemberInfo(Schema):
     avatar_url = fields.Str()
     role = fields.Str()
     anon_id = fields.Str()
-    joined_at = fields.DateTime()
+    joined_at = UTCDateTime()
     contribution = fields.Int()
     skills = fields.List(fields.Str())
 

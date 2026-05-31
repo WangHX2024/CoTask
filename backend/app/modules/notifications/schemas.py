@@ -1,12 +1,14 @@
 from marshmallow import Schema, fields
 
+from ...common.schemas import UTCDateTime
+
 
 class NotificationItem(Schema):
     id = fields.Int()
     type = fields.Str()
     payload = fields.Raw()
-    read_at = fields.DateTime(allow_none=True)
-    created_at = fields.DateTime()
+    read_at = UTCDateTime(allow_none=True)
+    created_at = UTCDateTime()
 
 
 class NotifyListQuery(Schema):

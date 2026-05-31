@@ -60,6 +60,11 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-no-reply@cotask.local}
       SMS_PROVIDER: ${SMS_PROVIDER:-stub}
+      SMS_ACCESS_KEY: ${SMS_ACCESS_KEY:-}
+      SMS_SECRET_KEY: ${SMS_SECRET_KEY:-}
+      SMS_AUTH_SIGN_NAME: ${SMS_AUTH_SIGN_NAME:-速通互联验证平台}
+      SMS_AUTH_TEMPLATE_CODE: ${SMS_AUTH_TEMPLATE_CODE:-100001}
+      SMS_COUNTRY_CODE: ${SMS_COUNTRY_CODE:-86}
     depends_on:
       mysql:
         condition: service_healthy
@@ -144,6 +149,7 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --ngram-token-size=2
+      - --default-time-zone=+00:00
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -171,6 +177,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Browser direct upload (frontend PUT to presigned URL on another port)
+      MINIO_API_CORS_ALLOW_ORIGIN: '*'
     volumes:
       - minio_data:/data
     ports:

@@ -72,7 +72,13 @@ class Config:
     AI_REQUEST_TIMEOUT = int(os.getenv("AI_REQUEST_TIMEOUT", "60"))
 
     # ---- SMS / Email ----
+    # stub: local Redis code (logged in dev); aliyun: PNVS SMS auth service
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "stub")
+    SMS_ACCESS_KEY = os.getenv("SMS_ACCESS_KEY", "")
+    SMS_SECRET_KEY = os.getenv("SMS_SECRET_KEY", "")
+    SMS_AUTH_SIGN_NAME = os.getenv("SMS_AUTH_SIGN_NAME", "速通互联验证平台")
+    SMS_AUTH_TEMPLATE_CODE = os.getenv("SMS_AUTH_TEMPLATE_CODE", "100001")
+    SMS_COUNTRY_CODE = os.getenv("SMS_COUNTRY_CODE", "86")
     SMTP_HOST = os.getenv("SMTP_HOST", "")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USER = os.getenv("SMTP_USER", "")
@@ -94,6 +100,7 @@ class Config:
     # ---- Misc ----
     UPLOAD_MAX_BYTES = 100 * 1024 * 1024  # 100MB
     INVITE_CODE_LENGTH = 8
+    SMS_CODE_LENGTH = int(os.getenv("SMS_CODE_LENGTH", "4"))
     SMS_CODE_TTL = 300  # 5 minutes
     NUDGE_COOLDOWN = 86400  # 24h
     DDL_WARNING_HOURS = 72

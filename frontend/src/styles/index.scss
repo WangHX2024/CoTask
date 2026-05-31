@@ -236,6 +236,17 @@ a {
   overflow: auto;
 }
 
+@import './workspace-toolbar.scss';
+
+body.is-col-resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+
+  * {
+    cursor: col-resize !important;
+  }
+}
+
 /* ============================================================
    Page Header (unified across .page)
    ============================================================ */

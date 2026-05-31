@@ -1,5 +1,7 @@
 from marshmallow import Schema, fields, validate
 
+from ...common.schemas import UTCDateTime
+
 
 class UserProfile(Schema):
     id = fields.Int()
@@ -14,7 +16,7 @@ class UserProfile(Schema):
     contribution = fields.Int()
     skills = fields.Method("get_skills")
     prefs = fields.Raw()
-    created_at = fields.DateTime()
+    created_at = UTCDateTime()
 
     def get_skills(self, obj):
         return [s.skill for s in (obj.skills or [])]
@@ -45,7 +47,7 @@ class ContributionItem(Schema):
     reason = fields.Str()
     ref_type = fields.Str()
     ref_id = fields.Int()
-    created_at = fields.DateTime()
+    created_at = UTCDateTime()
 
 
 class ContributionSummary(Schema):

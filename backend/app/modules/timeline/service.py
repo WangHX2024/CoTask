@@ -29,6 +29,36 @@ def _window(view: str, start: date | None) -> tuple[date, date]:
     return s, s + timedelta(days=6)
 
 
+def _title_by_id_for_tasks(task_rows: list) -> dict[int, str]:
+    ids: set[int] = set()
+    for t, _, _ in task_rows:
+        if t.path:
+            for seg in t.path.strip("/").split("/"):
+                if seg.isdigit():
+                    ids.add(int(seg))
+    if not ids:
+        return {}
+    return {
+        row[0]: row[1]
+        for row in db.session.execute(
+            select(Task.id, Task.title).where(
+                Task.id.in_(ids),
+                Task.deleted_at.is_(None),
+            )
+        ).all()
+    }
+
+
+def _title_path(task: Task, title_by_id: dict[int, str]) -> str:
+    if not task.path:
+        return task.title
+    names: list[str] = []
+    for seg in task.path.strip("/").split("/"):
+        if seg.isdigit():
+            names.append(title_by_id.get(int(seg), "…"))
+    return " / ".join(names) if names else task.title
+
+
 def get_timeline(group_id: int, view: str, start: date | None) -> dict:
     s, e = _window(view, start)
     members = db.session.execute(
@@ -43,8 +73,9 @@ def get_timeline(group_id: int, view: str, start: date | None) -> dict:
         .join(User, User.id == TaskAssignment.user_id)
         .where(
             Task.group_id == group_id,
-            Task.is_leaf.is_(True),
             Task.deleted_at.is_(None),
+            Task.start_date.isnot(None),
+            Task.end_date.isnot(None),
             Task.start_date <= e,
             Task.end_date >= s,
         )
@@ -57,6 +88,8 @@ def get_timeline(group_id: int, view: str, start: date | None) -> dict:
             select(TaskDependency).where(TaskDependency.task_id.in_(task_ids))
         ).scalars().all():
             deps_map.setdefault(d.task_id, []).append(d.depends_on)
+
+    title_by_id = _title_by_id_for_tasks(tasks)
 
     today = date.today()
     rows_by_uid: dict[int, dict] = {}
@@ -77,6 +110,7 @@ def get_timeline(group_id: int, view: str, start: date | None) -> dict:
         block = {
             "task_id": t.id,
             "title": t.title,
+            "title_path": _title_path(t, title_by_id),
             "user_id": u.id,
             "user_name": u.name,
             "user_avatar": u.avatar_url,

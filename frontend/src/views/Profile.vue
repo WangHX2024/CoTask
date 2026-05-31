@@ -297,6 +297,7 @@ import { InfoFilled } from '@element-plus/icons-vue'
 import { Api, type UserProfile } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import { PRESET_SKILLS } from '@/constants/skills'
 
 const auth = useAuthStore()
 
@@ -411,10 +412,7 @@ async function saveBasic() {
   }
 }
 
-const presetSkills = [
-  'PPT制作', '演讲', '写作', '文献综述', '数据分析',
-  '摄影', '设计', '视频剪辑', '编程', '项目统筹', '翻译',
-]
+const presetSkills = PRESET_SKILLS
 const selectedSkills = ref<string[]>([])
 const customInput = ref('')
 

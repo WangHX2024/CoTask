@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { Api, type TaskNode, type TreeResponse } from '@/api'
+import { Api, type NodePatchResult, type TaskNode, type TreeResponse } from '@/api'
 
 export const useTreeStore = defineStore('tree', {
   state: () => ({
@@ -9,6 +9,9 @@ export const useTreeStore = defineStore('tree', {
     loading: false,
     selectedId: 0,
     focusOnMine: false,
+    /** Debounce WS tree reload to avoid racing local PATCH (assignees, etc.). */
+    _wsReloadTimer: null as ReturnType<typeof setTimeout> | null,
+    lastPatchedAt: 0,
   }),
   getters: {
     byId: (s) => {
@@ -33,6 +36,15 @@ export const useTreeStore = defineStore('tree', {
       this.version = resp.version
       this.nodes = resp.nodes
     },
+    _patchNodeInStore(node: TaskNode) {
+      const idx = this.nodes.findIndex((n) => n.id === node.id)
+      if (idx >= 0) {
+        this.nodes[idx] = { ...this.nodes[idx], ...node }
+      }
+    },
+    _applyCascade(cascade: TaskNode[] = []) {
+      for (const n of cascade) this._patchNodeInStore(n)
+    },
     async load(gid: number) {
       this.groupId = gid
       this.loading = true
@@ -44,16 +56,22 @@ export const useTreeStore = defineStore('tree', {
     },
     async createChild(parentId: number | null, payload: any) {
       const node = await Api.createNode(this.groupId, { ...payload, parent_id: parentId })
-      // refetch entire tree to keep paths/closure consistent
       await this.load(this.groupId)
       this.selectedId = node.id
       return node
     },
     async updateNode(id: number, patch: any) {
-      const updated = await Api.updateNode(this.groupId, id, patch)
-      // simple optimistic replace; rely on WS / next load to reconcile depth/path
-      const idx = this.nodes.findIndex((n) => n.id === id)
-      if (idx >= 0) this.nodes[idx] = { ...this.nodes[idx], ...updated }
+      const updated: NodePatchResult = await Api.updateNode(this.groupId, id, patch)
+      this._patchNodeInStore(updated)
+      if (updated.cascade?.length) {
+        this._applyCascade(updated.cascade)
+      }
+      const versions = [
+        updated.version,
+        ...(updated.cascade || []).map((n) => n.version),
+      ]
+      this.version = Math.max(this.version, ...versions)
+      this.lastPatchedAt = Date.now()
       return updated
     },
     async deleteNode(id: number) {
@@ -68,8 +86,14 @@ export const useTreeStore = defineStore('tree', {
       this.selectedId = id
     },
     applyWSPatch(_patch: unknown) {
-      // for v1.0 we just refetch on tree.updated; finer-grained patches can come later
-      if (this.groupId) void this.load(this.groupId)
+      if (!this.groupId) return
+      // Skip immediate reload right after our own PATCH (WS echo races optimistic version).
+      if (Date.now() - this.lastPatchedAt < 1500) return
+      if (this._wsReloadTimer) clearTimeout(this._wsReloadTimer)
+      this._wsReloadTimer = setTimeout(() => {
+        this._wsReloadTimer = null
+        void this.load(this.groupId)
+      }, 400)
     },
   },
 })

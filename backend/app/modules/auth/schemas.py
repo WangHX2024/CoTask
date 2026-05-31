@@ -8,7 +8,7 @@ class SmsRequest(Schema):
 
 class RegisterRequest(Schema):
     phone = fields.Str(required=True, validate=validate.Regexp(r"^1[3-9]\d{9}$"))
-    code = fields.Str(required=True, validate=validate.Length(min=4, max=8))
+    code = fields.Str(required=True, validate=validate.Regexp(r"^\d{4}$", error="验证码须为 4 位数字"))
     password = fields.Str(required=True, validate=validate.Length(min=6, max=64))
     name = fields.Str(required=True, validate=validate.Length(min=1, max=64))
     student_id = fields.Str(load_default=None, validate=validate.Length(max=32))
@@ -22,7 +22,7 @@ class LoginRequest(Schema):
 
 class ResetPasswordRequest(Schema):
     phone = fields.Str(required=True, validate=validate.Regexp(r"^1[3-9]\d{9}$"))
-    code = fields.Str(required=True)
+    code = fields.Str(required=True, validate=validate.Regexp(r"^\d{4}$", error="验证码须为 4 位数字"))
     new_password = fields.Str(required=True, validate=validate.Length(min=6, max=64))
 
 

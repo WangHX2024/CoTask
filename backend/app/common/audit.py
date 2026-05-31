@@ -1,6 +1,8 @@
 """Audit log helper."""
 from __future__ import annotations
 
+from .json_util import json_safe
+
 from ..extensions import db
 from ..models import AuditLog
 
@@ -15,6 +17,6 @@ def record(actor_id: int, action: str, *, group_id: int | None = None,
             action=action,
             target_type=target_type,
             target_id=target_id,
-            payload=payload or {},
+            payload=json_safe(payload or {}),
         )
     )

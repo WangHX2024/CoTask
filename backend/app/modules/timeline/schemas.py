@@ -9,6 +9,7 @@ class TimelineQuery(Schema):
 class GanttBlock(Schema):
     task_id = fields.Int()
     title = fields.Str()
+    title_path = fields.Str()
     user_id = fields.Int()
     user_name = fields.Str()
     user_avatar = fields.Str()

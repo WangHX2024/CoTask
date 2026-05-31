@@ -7,6 +7,7 @@ from flask import current_app
 from flask_jwt_extended import create_access_token, create_refresh_token
 
 from ...common.errors import BadRequest, Conflict, Unauthorized
+from ...common.sms_service import AliyunSmsService, aliyun_sms_configured
 from ...common.tx import tx
 from ...common.utils import gen_sms_code, is_valid_phone
 from ...extensions import db, get_redis
@@ -28,7 +29,16 @@ def _check_pw(pw: str, hashed: str | None) -> bool:
         return False
 
 
-def send_sms(phone: str, purpose: str = "register") -> str:
+def _use_aliyun_sms() -> bool:
+    provider = current_app.config.get("SMS_PROVIDER", "stub")
+    if provider != "aliyun":
+        return False
+    if not aliyun_sms_configured():
+        raise BadRequest("SMS_NOT_CONFIGURED", "短信服务未配置，请联系管理员")
+    return True
+
+
+def send_sms(phone: str, purpose: str = "register") -> None:
     if not is_valid_phone(phone):
         raise BadRequest("INVALID_PHONE", "手机号格式不正确")
 
@@ -36,19 +46,24 @@ def send_sms(phone: str, purpose: str = "register") -> str:
     rate_key = f"sms:rate:{phone}"
     if r.get(rate_key):
         raise BadRequest("SMS_RATE_LIMIT", "请稍后再试")
-
-    code = gen_sms_code()
-    r.setex(f"sms:{purpose}:{phone}", current_app.config["SMS_CODE_TTL"], code)
     r.setex(rate_key, 60, "1")
 
-    provider = current_app.config["SMS_PROVIDER"]
-    if provider == "stub":
-        log.warning("[SMS-STUB] %s purpose=%s code=%s", phone, purpose, code)
-    # else: hook for real SMS provider
-    return code  # returned only for tests / stub callers
+    if _use_aliyun_sms():
+        if not AliyunSmsService.send_verification_code(phone):
+            raise BadRequest("SMS_SEND_FAILED", "验证码发送失败，请稍后重试")
+        return
+
+    code = gen_sms_code(current_app.config["SMS_CODE_LENGTH"])
+    r.setex(f"sms:{purpose}:{phone}", current_app.config["SMS_CODE_TTL"], code)
+    log.warning("[SMS-STUB] %s purpose=%s code=%s", phone, purpose, code)
 
 
 def _verify_code(phone: str, code: str, purpose: str):
+    if _use_aliyun_sms():
+        if not AliyunSmsService.verify_code(phone, code):
+            raise BadRequest("INVALID_CODE", "验证码错误或已过期")
+        return
+
     r = get_redis()
     key = f"sms:{purpose}:{phone}"
     saved = r.get(key)

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { Api, type UserBrief } from '@/api'
+import { useGroupsStore } from '@/stores/groups'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -18,12 +19,14 @@ export const useAuthStore = defineStore('auth', {
       this.user = u
     },
     async login(account: string, password: string) {
+      useGroupsStore().reset()
       const { data } = await Api.login({ account, password })
       this.setToken(data.access_token)
       this.setUser(data.user)
       return data
     },
     async register(data: any) {
+      useGroupsStore().reset()
       const r = await Api.register(data)
       this.setToken(r.data.access_token)
       this.setUser(r.data.user)
@@ -38,6 +41,7 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = ''
       this.user = null
       localStorage.removeItem('access_token')
+      useGroupsStore().reset()
     },
   },
   persist: {

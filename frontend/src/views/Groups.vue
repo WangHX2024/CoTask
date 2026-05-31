@@ -237,7 +237,7 @@
             @input="onInviteInput"
           />
         </el-form-item>
-        <div class="hint tiny muted">向组长索取邀请码后填入</div>
+        <div class="hint tiny muted">索取邀请码后填入</div>
       </el-form>
       <template #footer>
         <div class="dialog-footer-actions">

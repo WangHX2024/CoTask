@@ -1,7 +1,28 @@
 <template>
   <div class="disc-page">
+    <!-- Mobile picker (outside split so desktop layout keeps gap) -->
+    <div class="mobile-channel-picker">
+      <el-select
+        v-model="currentChannelId"
+        placeholder="选择频道"
+        @change="onMobileSelect"
+        class="mc-select"
+      >
+        <el-option
+          v-for="c in channels"
+          :key="c.id"
+          :label="`# ${c.name}`"
+          :value="c.id"
+        />
+      </el-select>
+      <el-button size="small" @click="openCreate">
+        <el-icon><Plus /></el-icon>
+      </el-button>
+    </div>
+
+    <div ref="discSplitRef" class="disc-split">
     <!-- LEFT channels -->
-    <aside class="disc-left">
+    <aside class="disc-left" :style="sidebarStyle">
       <div class="disc-left-head">
         <span class="disc-title">频道</span>
         <el-button text size="small" @click="openCreate" title="创建频道">
@@ -25,25 +46,13 @@
       </div>
     </aside>
 
-    <!-- Mobile picker -->
-    <div class="mobile-channel-picker">
-      <el-select
-        v-model="currentChannelId"
-        placeholder="选择频道"
-        @change="onMobileSelect"
-        class="mc-select"
-      >
-        <el-option
-          v-for="c in channels"
-          :key="c.id"
-          :label="`# ${c.name}`"
-          :value="c.id"
-        />
-      </el-select>
-      <el-button size="small" @click="openCreate">
-        <el-icon><Plus /></el-icon>
-      </el-button>
-    </div>
+    <ResizeHandle
+      v-model="sidebarWidth"
+      class="disc-split__handle"
+      :min="sidebarMin"
+      :max="sidebarMax"
+      storage-key="cotask.discussion.sidebar"
+    />
 
     <!-- RIGHT message panel -->
     <section class="disc-right">
@@ -71,19 +80,18 @@
           v-for="m in messages"
           :key="m.id"
           class="msg-row"
+          :class="{ 'msg-row--mine': isOwnMessage(m) }"
         >
           <el-avatar
-            :src="m.anon ? '' : m.author_avatar"
+            :src="m.author_avatar || undefined"
             :size="32"
             class="msg-avatar"
           >
             {{ msgInitial(m) }}
           </el-avatar>
-          <div class="msg-body-wrap">
+          <div class="msg-stack">
             <div class="msg-meta">
-              <span class="msg-author">
-                {{ m.anon ? `匿名同学#${anonTag(m.author_id)}` : m.author_name }}
-              </span>
+              <span class="msg-author">{{ m.author_name || '用户' }}</span>
               <span class="msg-time" :title="m.created_at">
                 {{ relativeTime(m.created_at) }}
               </span>
@@ -93,11 +101,16 @@
                 </el-button>
               </div>
             </div>
-            <div v-if="m.quote_id" class="msg-quote">
-              <el-icon><Right /></el-icon>
-              <span class="muted tiny">{{ quotePreview(m.quote_id) }}</span>
+            <div class="msg-bubble" :class="{ 'msg-bubble--mine': isOwnMessage(m) }">
+              <div v-if="m.quote_id" class="msg-bubble-quote">
+                <span class="msg-bubble-quote-bar" aria-hidden="true" />
+                <span class="msg-bubble-quote-inner">
+                  <el-icon><Right /></el-icon>
+                  <span>{{ quotePreview(m.quote_id) }}</span>
+                </span>
+              </div>
+              <div class="msg-bubble-body" v-html="renderBody(m.body)"></div>
             </div>
-            <div class="msg-body" v-html="renderBody(m.body)"></div>
           </div>
         </div>
       </div>
@@ -113,19 +126,11 @@
 
       <!-- Input bar -->
       <div class="input-bar">
-        <div class="input-left">
-          <el-switch
-            v-model="anon"
-            active-text="匿名"
-            inline-prompt
-            size="small"
-          />
-        </div>
-
         <div class="input-mid">
           <el-input
             ref="inputRef"
             v-model="draft"
+            class="disc-compose-input"
             type="textarea"
             :autosize="{ minRows: 1, maxRows: 4 }"
             placeholder="说点什么…（Ctrl/Cmd + Enter 发送，@ 提到成员）"
@@ -151,18 +156,20 @@
           </div>
         </div>
 
-        <div class="input-right">
-          <el-button
-            type="primary"
-            :disabled="!canSend"
-            :loading="sending"
+        <div class="input-actions">
+          <button
+            type="button"
+            class="insp-capsule-btn insp-capsule-btn--primary disc-send-btn"
+            :disabled="!canSend || sending"
             @click="onSend"
           >
-            <el-icon><Promotion /></el-icon>&nbsp;发送
-          </el-button>
+            <el-icon><Promotion /></el-icon>
+            <span>{{ sending ? '发送中…' : '发送' }}</span>
+          </button>
         </div>
       </div>
     </section>
+    </div>
 
     <!-- Create channel dialog -->
     <el-dialog v-model="createOpen" title="创建频道" width="420px">
@@ -191,6 +198,7 @@ import {
   Plus, ChatLineRound, ChatDotRound, Right, Close, Promotion,
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { parseApiDate, relativeTime } from '@/utils/datetime'
 import {
   Api,
   type Channel,
@@ -200,6 +208,25 @@ import {
 import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
 import { useWS } from '@/composables/useWS'
+import ResizeHandle from '@/components/common/ResizeHandle.vue'
+import { useResizableWidth } from '@/composables/useResizableWidth'
+
+const discSplitRef = ref<HTMLElement | null>(null)
+
+const {
+  width: sidebarWidth,
+  style: sidebarStyle,
+  minWidth: sidebarMin,
+  maxWidth: sidebarMax,
+  bindSplitContainer,
+} = useResizableWidth({
+  defaultWidth: 220,
+  minWidth: 140,
+  maxWidth: 520,
+  mainMinWidth: 200,
+})
+
+bindSplitContainer(discSplitRef)
 
 const route = useRoute()
 const groups = useGroupsStore()
@@ -217,7 +244,6 @@ const loadingChannels = ref(false)
 const loadingMessages = ref(false)
 
 const draft = ref('')
-const anon = ref(false)
 const quoted = ref<DiscussionMessage | null>(null)
 const sending = ref(false)
 
@@ -268,8 +294,12 @@ async function loadChannels() {
         // silent: user may not have perms
       }
     }
-    if (channels.value.length && !currentChannelId.value) {
-      currentChannelId.value = channels.value[0].id
+    const qChannel = Number(route.query.channel)
+    if (qChannel && channels.value.some((c) => c.id === qChannel)) {
+      currentChannelId.value = qChannel
+    } else if (channels.value.length && !currentChannelId.value) {
+      const groupCh = channels.value.find((c) => !c.task_id && c.name === '全员')
+      currentChannelId.value = groupCh?.id ?? channels.value[0].id
     }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '加载频道失败')
@@ -288,7 +318,7 @@ async function loadMessages() {
     })
     // server returns newest-first commonly — sort oldest first
     messages.value = [...list].sort(
-      (a, b) => dayjs(a.created_at).valueOf() - dayjs(b.created_at).valueOf(),
+      (a, b) => parseApiDate(a.created_at).valueOf() - parseApiDate(b.created_at).valueOf(),
     )
     await nextTick()
     scrollToBottom()
@@ -355,7 +385,6 @@ async function onSend() {
     const payload: any = {
       channel_id: currentChannelId.value,
       body,
-      anon: anon.value,
     }
     if (quoted.value) payload.quote_id = quoted.value.id
     const msg = await Api.postMessage(gid.value, payload)
@@ -465,25 +494,11 @@ function pickMention(u: MemberInfo) {
 }
 
 // ---------- helpers ----------
-function relativeTime(iso: string): string {
-  const t = dayjs(iso)
-  const now = dayjs()
-  const diffSec = now.diff(t, 'second')
-  if (diffSec < 60) return '刚刚'
-  const diffMin = now.diff(t, 'minute')
-  if (diffMin < 60) return `${diffMin} 分钟前`
-  const diffHr = now.diff(t, 'hour')
-  if (diffHr < 24) return `${diffHr} 小时前`
-  const diffDay = now.diff(t, 'day')
-  if (diffDay === 1) return '昨天'
-  if (diffDay < 7) return `${diffDay} 天前`
-  return t.format('YYYY-MM-DD HH:mm')
+function isOwnMessage(m: DiscussionMessage) {
+  return !!auth.user?.id && m.author_id === auth.user.id && !m.anon
 }
-function anonTag(uid: number) {
-  return (uid * 7919) % 10000
-}
+
 function msgInitial(m: DiscussionMessage) {
-  if (m.anon) return '匿'
   return (m.author_name || '?').slice(0, 1)
 }
 function escapeHtml(s: string): string {
@@ -506,12 +521,12 @@ function quotePreview(qid: number): string {
   const m = messages.value.find((x) => x.id === qid)
   if (!m) return '引用的消息'
   const body = (m.body || '').replace(/\s+/g, ' ')
-  const author = m.anon ? '匿名同学' : (m.author_name || '?')
+  const author = m.author_name || '?'
   const preview = body.length > 40 ? `${body.slice(0, 40)}…` : body
   return `${author}：${preview}`
 }
 function quotePreviewFull(m: DiscussionMessage): string {
-  const author = m.anon ? '匿名同学' : (m.author_name || '?')
+  const author = m.author_name || '?'
   const body = (m.body || '').replace(/\s+/g, ' ')
   const preview = body.length > 60 ? `${body.slice(0, 60)}…` : body
   return `回复 ${author}：${preview}`
@@ -538,11 +553,25 @@ function setupWS() {
 }
 
 // ---------- mount ----------
+function applyRouteChannel() {
+  const qChannel = Number(route.query.channel)
+  if (qChannel && channels.value.some((c) => c.id === qChannel)) {
+    currentChannelId.value = qChannel
+    void loadMessages()
+  }
+}
+
 onMounted(async () => {
   await Promise.all([loadChannels(), loadMembers()])
+  applyRouteChannel()
   if (currentChannelId.value) await loadMessages()
   setupWS()
 })
+
+watch(
+  () => route.query.channel,
+  () => applyRouteChannel(),
+)
 onUnmounted(() => {
   if (off) off()
 })
@@ -555,19 +584,37 @@ watch(gid, async () => {
 })
 </script>
 
+<style lang="scss">
+@use '@/styles/inspiration-pages.scss';
+</style>
+
 <style lang="scss" scoped>
 .disc-page {
   display: flex;
-  gap: var(--space-5);
+  flex-direction: column;
   flex: 1;
   min-height: 0;
+  gap: var(--space-4);
   padding: var(--space-6);
   box-sizing: border-box;
 }
 
+.disc-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.disc-split__handle {
+  flex-shrink: 0;
+  margin: 0 calc(var(--space-2) * -1);
+}
+
 /* ---------- Left channel sidebar ---------- */
 .disc-left {
-  width: 220px;
   flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -643,44 +690,78 @@ watch(gid, async () => {
   }
 }
 
-/* ---------- Message list ---------- */
+/* ---------- Message list (chat bubbles, aligned with task drawer preview) ---------- */
 .msg-list {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-4) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  align-items: stretch;
+  gap: 10px;
+  background: var(--bg-soft);
 }
 
 .msg-row {
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
-  transition: background 120ms ease;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: min(82%, 560px);
+  align-self: flex-start;
 
-  &:hover {
-    background: var(--bg-soft);
-    .msg-actions { opacity: 1; }
+  &:hover .msg-actions {
+    opacity: 1;
+  }
+
+  &--mine {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+
+    .msg-meta {
+      flex-direction: row-reverse;
+    }
+
+    .msg-actions {
+      margin-left: 0;
+      margin-right: auto;
+    }
   }
 }
 
-.msg-avatar { flex-shrink: 0; }
+.msg-avatar {
+  flex-shrink: 0;
+}
 
-.msg-body-wrap { flex: 1; min-width: 0; }
+.msg-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.msg-row--mine .msg-stack {
+  align-items: flex-end;
+}
 
 .msg-meta {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
+  margin-bottom: 4px;
+  padding: 0 6px;
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  color: var(--text-tertiary);
 
   .msg-author {
-    color: var(--text-primary);
+    color: var(--text-secondary);
     font-weight: 600;
-    font-size: var(--fs-base);
+    font-size: var(--fs-xs);
+  }
+
+  .msg-time {
+    font-size: 10px;
   }
 
   .msg-actions {
@@ -690,28 +771,64 @@ watch(gid, async () => {
   }
 }
 
-.msg-quote {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 3px var(--space-2);
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-primary-lighter);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  margin: var(--space-1) 0;
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
+.msg-bubble {
+  --bubble-r: 16px;
+  --bubble-bg: color-mix(in srgb, var(--bg-card) 94%, var(--bg-soft));
+
+  max-width: 100%;
+  padding: 8px 12px 9px;
+  background: var(--bubble-bg);
+  border-radius: var(--bubble-r);
+  box-shadow: 0 1px 0.5px color-mix(in srgb, var(--text-primary) 5%, transparent);
+
+  &--mine {
+    --bubble-bg: color-mix(in srgb, var(--color-primary) 24%, var(--bg-card));
+
+    border-radius: var(--bubble-r) var(--bubble-r) 0 var(--bubble-r);
+  }
 }
 
-.msg-body {
+.msg-bubble-quote {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 6px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--text-primary) 5%, var(--bubble-bg));
+}
+
+.msg-bubble-quote-bar {
+  flex-shrink: 0;
+  width: 3px;
+  background: var(--color-primary);
+}
+
+.msg-bubble-quote-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  word-break: break-word;
+
+  .el-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+    font-size: 12px;
+  }
+}
+
+.msg-bubble-body {
   font-size: var(--fs-base);
-  line-height: 1.6;
+  line-height: 1.55;
   word-break: break-word;
   white-space: pre-wrap;
   color: var(--text-primary);
 }
 
-.msg-body :deep(.at-mention) {
+.msg-bubble-body :deep(.at-mention) {
   color: var(--color-primary);
   background: var(--color-primary-light);
   border-radius: var(--radius-xs);
@@ -741,35 +858,97 @@ watch(gid, async () => {
 /* ---------- Quote bar ---------- */
 .quote-bar {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 5px var(--space-4);
-  background: var(--color-primary-lighter);
+  align-items: stretch;
   border-top: 1px solid var(--border-subtle);
+  background: var(--color-primary-lighter);
   font-size: var(--fs-sm);
   color: var(--text-secondary);
 
+  &::before {
+    content: '';
+    flex-shrink: 0;
+    width: 3px;
+    background: var(--color-primary);
+  }
+
+  .el-icon,
+  .quote-preview,
+  .el-button {
+    align-self: center;
+  }
+
+  .el-icon {
+    margin-left: var(--space-3);
+  }
+
   .quote-preview {
     flex: 1;
+    min-width: 0;
+    margin: 0 var(--space-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .el-button {
+    margin-right: var(--space-2);
   }
 }
 
 /* ---------- Input bar ---------- */
 .input-bar {
+  /* Match send button to single-line textarea height */
+  --disc-compose-h: 34px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
   padding: var(--space-3) var(--space-6);
   display: flex;
   align-items: flex-end;
-  gap: var(--space-2);
+  gap: var(--space-3);
   flex-shrink: 0;
 
-  .input-left  { padding-bottom: var(--space-1); }
-  .input-mid   { flex: 1; min-width: 0; position: relative; }
-  .input-right { padding-bottom: 0; }
+  .input-mid { flex: 1; min-width: 0; position: relative; }
+
+  .disc-compose-input :deep(.el-textarea__inner) {
+    min-height: var(--disc-compose-h);
+    padding: 7px 14px;
+    line-height: 20px;
+    box-sizing: border-box;
+    font-size: var(--fs-base);
+    border-radius: var(--radius-full);
+    box-shadow: 0 0 0 1px var(--border-color) inset !important;
+
+    &:hover {
+      box-shadow: 0 0 0 1px var(--text-tertiary) inset !important;
+    }
+
+    &:focus {
+      box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+    }
+  }
+
+  .input-actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    align-self: flex-end;
+  }
+
+  .disc-send-btn.insp-capsule-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    height: var(--disc-compose-h);
+    min-height: var(--disc-compose-h);
+    min-width: 88px;
+    padding: 0 var(--space-4);
+    font-size: var(--fs-sm);
+    flex-shrink: 0;
+
+    .el-icon {
+      font-size: 14px;
+      color: inherit;
+    }
+  }
 }
 
 /* ---------- Mention popup ---------- */
@@ -802,8 +981,13 @@ watch(gid, async () => {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
-  .disc-page { flex-direction: column; }
-  .disc-left { display: none; }
+  .disc-split {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .disc-left,
+  .disc-split__handle { display: none; }
   .mobile-channel-picker { display: flex; }
   .disc-right { flex: 1; }
 }

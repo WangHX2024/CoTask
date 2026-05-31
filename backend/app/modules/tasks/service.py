@@ -17,7 +17,12 @@ from ...models import (
     User,
 )
 from ..notifications.service import push_ws
-from ..tree.service import _ensure_member, _recompute_ancestors_progress
+from ..tree.service import (
+    _ensure_member,
+    _progress_for_status,
+    _recompute_ancestors_progress,
+    assert_status_change_allowed,
+)
 from ..users.service import adjust_contribution
 
 
@@ -59,26 +64,28 @@ def get_detail(group_id: int, task_id: int) -> dict:
 
 
 def change_status(actor_id: int, group_id: int, task_id: int, new_status: str, role: str):
+    from ...common.task_permissions import can_manage_task
+
     t = _get_task(group_id, task_id)
-    if not t.is_leaf:
-        raise BadRequest("NOT_LEAF", "仅原子任务可推进状态")
-    if role != "leader":
+    if not can_manage_task(actor_id, group_id, task_id):
         assigned = db.session.execute(
             select(TaskAssignment).where(
                 TaskAssignment.task_id == task_id, TaskAssignment.user_id == actor_id
             )
         ).scalar_one_or_none()
         if not assigned:
-            raise Forbidden("仅负责人或组长可推进")
+            raise Forbidden("仅负责人或节点管理员可推进状态")
+    if new_status == t.status:
+        return get_detail(group_id, task_id)
+    assert_status_change_allowed(task_id)
     old_status = t.status
     with tx():
         t.status = new_status
         t.version += 1
+        t.progress = _progress_for_status(new_status, t.progress or 0)
         if new_status == "done":
-            t.progress = 100
             # contribution: on-time = +10, late = -5
             if t.end_date and date.today() <= t.end_date:
-                # +10 per assignee
                 for r in db.session.execute(
                     select(TaskAssignment).where(TaskAssignment.task_id == task_id)
                 ).scalars().all():
@@ -90,11 +97,8 @@ def change_status(actor_id: int, group_id: int, task_id: int, new_status: str, r
                 ).scalars().all():
                     adjust_contribution(r.user_id, -5, "task_done_late",
                                         "task", task_id)
-        elif new_status == "todo":
-            t.progress = 0
-        elif new_status == "in_progress" and t.progress == 0:
-            t.progress = 30
         _recompute_ancestors_progress(task_id)
+        push_ws(group_id, "tree.updated", {"group_id": group_id})
         audit.record(actor_id, "task.status",
                      group_id=group_id, target_type="task", target_id=task_id,
                      payload={"from": old_status, "to": new_status})
@@ -105,12 +109,18 @@ def change_status(actor_id: int, group_id: int, task_id: int, new_status: str, r
 
 
 def assign(actor_id: int, group_id: int, task_id: int, users: list[int]):
+    from ...common.task_permissions import assert_can_manage_task
+
     t = _get_task(group_id, task_id)
+    assert_can_manage_task(actor_id, group_id, task_id)
     _ensure_member(group_id, users)
+    from ...common.task_permissions import sync_subtree_managers_from_assignees
+
     with tx() as s:
         s.execute(db.delete(TaskAssignment).where(TaskAssignment.task_id == task_id))
         for uid in users:
             s.add(TaskAssignment(task_id=task_id, user_id=uid))
+        sync_subtree_managers_from_assignees(actor_id, group_id, task_id, users)
         t.version += 1
         audit.record(actor_id, "task.assign", group_id=group_id, target_type="task",
                      target_id=task_id, payload={"users": users})
@@ -121,19 +131,31 @@ def assign(actor_id: int, group_id: int, task_id: int, users: list[int]):
 
 
 def nudge(actor_id: int, group_id: int, task_id: int, message: str):
+    from ...common.task_permissions import can_manage_task
+
     t = _get_task(group_id, task_id)
-    if not t.is_leaf:
-        raise BadRequest("NOT_LEAF", "仅原子任务可催办")
+    if not can_manage_task(actor_id, group_id, task_id) and actor_id not in [
+        r.user_id
+        for r in db.session.execute(
+            select(TaskAssignment).where(TaskAssignment.task_id == task_id)
+        ).scalars().all()
+    ]:
+        raise Forbidden("仅负责人或节点管理员可催办")
     assignees = [
-        r.user_id for r in db.session.execute(
+        r.user_id
+        for r in db.session.execute(
             select(TaskAssignment).where(TaskAssignment.task_id == task_id)
         ).scalars().all()
     ]
+    if not assignees:
+        raise BadRequest("NO_ASSIGNEES", "请先为任务指定负责人后再催办")
+    targets = [uid for uid in assignees if uid != actor_id]
+    if not targets:
+        raise BadRequest("NUDGE_NO_TARGETS", "没有可催办的对象（负责人中不包含其他成员）")
+
     r = get_redis()
     sent = 0
-    for uid in assignees:
-        if uid == actor_id:
-            continue
+    for uid in targets:
         key = f"nudge:{actor_id}:{uid}:{task_id}"
         if r.setnx(key, "1"):
             r.expire(key, 86400)
@@ -144,12 +166,17 @@ def nudge(actor_id: int, group_id: int, task_id: int, message: str):
                 "message": message,
             })
             push_ws(group_id, "task.nudged", {
-                "task_id": task_id, "from_user_id": actor_id,
-                "to_user_id": uid, "message": message,
+                "task_id": task_id,
+                "from_user_id": actor_id,
+                "to_user_id": uid,
+                "message": message,
             })
             sent += 1
     if sent == 0:
-        raise BadRequest("NUDGE_COOLDOWN", "24小时内已催办过")
+        raise BadRequest(
+            "NUDGE_COOLDOWN",
+            "24小时内已向该任务的所有负责人催办过",
+        )
     audit.record(actor_id, "task.nudge", group_id=group_id, target_type="task", target_id=task_id)
 
 

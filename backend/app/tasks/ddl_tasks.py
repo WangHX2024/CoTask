@@ -25,7 +25,6 @@ def scan_ddls():
         .join(TaskAssignment, TaskAssignment.task_id == Task.id)
         .join(User, User.id == TaskAssignment.user_id)
         .where(
-            Task.is_leaf.is_(True),
             Task.deleted_at.is_(None),
             Task.status != "done",
             Task.end_date.is_not(None),
@@ -62,9 +61,9 @@ def daily_digest():
         .join(TaskAssignment, TaskAssignment.user_id == User.id)
         .join(Task, Task.id == TaskAssignment.task_id)
         .where(
-            Task.is_leaf.is_(True),
             Task.deleted_at.is_(None),
             Task.status != "done",
+            Task.end_date.is_not(None),
         ).distinct()
     ).all()
     log.info("daily digest: %d users", len(rows))

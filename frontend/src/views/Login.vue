@@ -22,42 +22,8 @@
               </div>
 
               <div class="brand-showcase" aria-hidden="true">
-                <div v-if="heroSlides[activeSlide].id === 'tree'" class="showcase-stack">
-                  <div class="showcase-card showcase-card--tree showcase-card--solo">
-                    <div class="sc-label">项目树</div>
-                    <div class="sc-tree">
-                      <div class="sc-node sc-node--root" />
-                      <div class="sc-branch">
-                        <div class="sc-node" />
-                        <div class="sc-node sc-node--active" />
-                      </div>
-                      <div class="sc-branch sc-branch--short">
-                        <div class="sc-node" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div v-else-if="heroSlides[activeSlide].id === 'timeline'" class="showcase-stack">
-                  <div class="showcase-card showcase-card--timeline showcase-card--solo">
-                    <div class="sc-label">本周 DDL</div>
-                    <div class="sc-bars">
-                      <span class="sc-bar" style="--w: 72%" />
-                      <span class="sc-bar sc-bar--warn" style="--w: 45%" />
-                      <span class="sc-bar" style="--w: 88%" />
-                      <span class="sc-bar" style="--w: 60%" />
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="showcase-stack showcase-stack--ai">
-                  <div class="showcase-card showcase-card--ai showcase-card--solo">
-                    <div class="sc-label">AI 今日建议</div>
-                    <p class="sc-ai-line">你今天有 3 项待办，其中 1 项紧急。</p>
-                    <p class="sc-ai-focus">
-                      <el-icon><MagicStick /></el-icon>
-                      重点推进：文献综述初稿
-                    </p>
-                  </div>
-                </div>
+                <span class="brand-feature-pill">{{ heroSlides[activeSlide].dotLabel }}</span>
+                <LoginHeroShowcase :slide-id="heroSlides[activeSlide].id" />
               </div>
             </div>
           </transition>
@@ -88,13 +54,13 @@
       <div class="form-wrap">
         <div class="mobile-brand">
           <CoTaskLogo size="md" variant="on-light" />
-          <p class="mobile-tagline">AI 赋能的课程小组协作平台</p>
+          <p class="mobile-tagline">课程小组协作与项目管理</p>
         </div>
 
         <el-card class="login-card" shadow="never">
           <div class="card-header">
             <div class="card-title">欢迎使用 CoTask</div>
-            <div class="card-sub">登录后开始你的小组协作之旅</div>
+            <div class="card-sub">登录后创建或加入小组，开始协作管理课程项目</div>
           </div>
 
           <SegmentedControl
@@ -168,8 +134,8 @@
                     <el-input
                       v-model="registerForm.code"
                       size="large"
-                      placeholder="6 位验证码"
-                      maxlength="6"
+                      placeholder="4 位验证码"
+                      maxlength="4"
                     />
                     <el-button
                       size="large"
@@ -249,8 +215,8 @@
                     <el-input
                       v-model="resetForm.code"
                       size="large"
-                      placeholder="6 位验证码"
-                      maxlength="6"
+                      placeholder="4 位验证码"
+                      maxlength="4"
                     />
                     <el-button
                       size="large"
@@ -304,11 +270,13 @@
 import { reactive, ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { User, Lock, Phone, MagicStick } from '@element-plus/icons-vue'
+import { User, Lock, Phone } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { Api } from '@/api'
+import { LOGIN_HERO_SLIDES } from '@/constants/loginHero'
 import CoTaskLogo from '@/components/common/CoTaskLogo.vue'
 import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import LoginHeroShowcase from '@/components/auth/LoginHeroShowcase.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -323,29 +291,10 @@ const authTabOptions = [
   { label: '找回密码', value: 'reset' as const },
 ]
 
-const heroSlides = [
-  {
-    id: 'tree',
-    dotLabel: '项目树',
-    headline: ['课程小组协作，', '从任务树开始'],
-    lead: '无限层级的任务分解，让每个人都知道自己该做什么。',
-  },
-  {
-    id: 'timeline',
-    dotLabel: '时间轴',
-    headline: ['DDL 与依赖，', '一图看清'],
-    lead: '甘特时间轴对齐截止日与负责人，进度风险提前暴露。',
-  },
-  {
-    id: 'ai',
-    dotLabel: 'AI 助手',
-    headline: ['AI 智能助手，', '每日帮你推进'],
-    lead: '生成任务树、对话编辑结构，并给出今日行动建议。',
-  },
-] as const
+const heroSlides = LOGIN_HERO_SLIDES
 
 const activeSlide = ref(0)
-const CAROUSEL_MS = 4800
+const CAROUSEL_MS = 5200
 let carouselTimer: number | null = null
 let carouselPaused = false
 
@@ -422,7 +371,7 @@ const registerRules: FormRules = {
   phone: [{ required: true, validator: validatePhone, trigger: 'blur' }],
   code: [
     { required: true, message: '请输入验证码', trigger: 'blur' },
-    { pattern: /^\d{6}$/, message: '验证码为 6 位数字', trigger: 'blur' },
+    { pattern: /^\d{4}$/, message: '验证码为 4 位数字', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -462,7 +411,7 @@ const resetRules: FormRules = {
   phone: [{ required: true, validator: validatePhone, trigger: 'blur' }],
   code: [
     { required: true, message: '请输入验证码', trigger: 'blur' },
-    { pattern: /^\d{6}$/, message: '验证码为 6 位数字', trigger: 'blur' },
+    { pattern: /^\d{4}$/, message: '验证码为 4 位数字', trigger: 'blur' },
   ],
   new_password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
@@ -572,7 +521,8 @@ async function onGuestLogin() {
   inset: 0;
   background:
     radial-gradient(ellipse 70% 55% at 85% 15%, rgba(255, 255, 255, 0.14), transparent 55%),
-    radial-gradient(ellipse 50% 45% at 10% 85%, rgba(255, 255, 255, 0.08), transparent 50%);
+    radial-gradient(ellipse 50% 45% at 10% 85%, rgba(255, 255, 255, 0.08), transparent 50%),
+    radial-gradient(circle at 72% 68%, rgba(255, 255, 255, 0.06) 0%, transparent 28%);
   pointer-events: none;
 }
 
@@ -599,7 +549,7 @@ async function onGuestLogin() {
 .carousel-slide {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: clamp(var(--space-5), 3vh, var(--space-7));
 }
 
 .hero-fade-enter-active,
@@ -684,113 +634,25 @@ async function onGuestLogin() {
 
 .brand-showcase {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 240px;
+}
+
+.brand-feature-pill {
+  display: inline-flex;
   align-items: center;
-  min-height: 200px;
-}
-
-.showcase-stack {
-  position: relative;
-  width: 100%;
-  max-width: 400px;
-  min-height: 200px;
-}
-
-.showcase-card {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
-}
-
-.showcase-card--solo {
-  width: 100%;
-}
-
-.showcase-card--ai {
-  .sc-ai-line {
-    margin: 0 0 var(--space-3);
-    font-size: var(--fs-sm);
-    line-height: 1.55;
-    opacity: 0.9;
-  }
-
-  .sc-ai-focus {
-    margin: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.14);
-  }
-}
-
-.sc-label {
-  font-size: var(--fs-xs);
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
-  opacity: 0.75;
-  margin-bottom: var(--space-3);
-}
-
-.sc-tree {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-left: var(--space-2);
-  border-left: 2px solid rgba(255, 255, 255, 0.25);
-}
-
-.sc-branch {
-  display: flex;
-  gap: var(--space-2);
-  padding-left: var(--space-3);
-
-  &--short {
-    padding-left: var(--space-2);
-  }
-}
-
-.sc-node {
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.35);
-  flex: 1;
-  min-width: 24px;
-
-  &--root {
-    max-width: 100%;
-    height: 10px;
-    background: rgba(255, 255, 255, 0.5);
-  }
-
-  &--active {
-    background: #fff;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
-  }
-}
-
-.sc-bars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.sc-bar {
-  display: block;
-  height: 8px;
-  width: var(--w, 50%);
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.45);
-
-  &--warn {
-    background: rgba(251, 191, 36, 0.85);
-  }
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }
 
 .brand-foot {

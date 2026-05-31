@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+
+from ...common.datetime_util import utc_now
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from ...common.tx import tx
 from ...extensions import db, get_redis
@@ -64,7 +66,12 @@ def mark_read(uid: int, ids: list[int] | None = None):
         )
         if ids:
             q = q.where(Notification.id.in_(ids))
-        s.execute(q.values(read_at=datetime.utcnow()))
+        s.execute(q.values(read_at=utc_now()))
+
+
+def clear_all(uid: int) -> None:
+    with tx() as s:
+        s.execute(delete(Notification).where(Notification.user_id == uid))
 
 
 def unread_count(uid: int) -> int:

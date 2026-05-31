@@ -19,6 +19,11 @@ export const useNotifyStore = defineStore('notify', {
       await Api.markRead(ids)
       await this.refresh()
     },
+    async clearAll() {
+      await Api.clearNotifications()
+      this.items = []
+      this.unread = 0
+    },
     push(item: NotificationItem) {
       this.items.unshift(item)
       this.unread += 1

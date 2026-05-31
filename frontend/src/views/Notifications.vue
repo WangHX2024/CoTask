@@ -18,15 +18,26 @@
         class="notify-filter"
         :options="filterOptions"
       />
-      <el-button
-        round
-        class="mark-all-btn"
-        :disabled="!hasUnread"
-        :loading="marking"
-        @click="onMarkAll"
-      >
-        <el-icon><Check /></el-icon>&nbsp;全部标记为已读
-      </el-button>
+      <div class="notify-toolbar__actions">
+        <el-button
+          round
+          class="toolbar-btn"
+          :disabled="!hasUnread"
+          :loading="marking"
+          @click="onMarkAll"
+        >
+          <el-icon><Check /></el-icon>&nbsp;全部已读
+        </el-button>
+        <el-button
+          round
+          class="toolbar-btn toolbar-btn--danger"
+          :disabled="!items.length"
+          :loading="clearing"
+          @click="onClearAll"
+        >
+          <el-icon><Delete /></el-icon>&nbsp;清除全部
+        </el-button>
+      </div>
     </div>
 
     <el-card shadow="never" class="list-card" v-loading="loading">
@@ -84,9 +95,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Bell, Check, ArrowRight } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Bell, Check, ArrowRight, Delete } from '@element-plus/icons-vue'
+import { relativeTime } from '@/utils/datetime'
 import { useNotifyStore } from '@/stores/notifications'
 import type { NotificationItem } from '@/api'
 import SegmentedControl from '@/components/common/SegmentedControl.vue'
@@ -97,6 +108,7 @@ const notify = useNotifyStore()
 // ---------- state ----------
 const loading = ref(false)
 const marking = ref(false)
+const clearing = ref(false)
 const currentFilter = ref<'all' | 'unread' | 'urgent'>('all')
 const pageSize = ref(30)
 
@@ -153,6 +165,33 @@ async function onMarkAll() {
     ElMessage.error(e?.response?.data?.message || '操作失败')
   } finally {
     marking.value = false
+  }
+}
+
+async function onClearAll() {
+  if (!items.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      '将永久删除你的全部消息记录，且无法恢复。确定继续吗？',
+      '清除全部消息',
+      {
+        confirmButtonText: '清除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  clearing.value = true
+  try {
+    await notify.clearAll()
+    pageSize.value = 30
+    ElMessage.success('已清除全部消息')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '清除失败')
+  } finally {
+    clearing.value = false
   }
 }
 
@@ -243,21 +282,6 @@ function iconStyle(type: string) {
   return { background: c.bg, color: c.fg }
 }
 
-function relativeTime(iso: string): string {
-  const t = dayjs(iso)
-  const now = dayjs()
-  const diffSec = now.diff(t, 'second')
-  if (diffSec < 60) return '刚刚'
-  const diffMin = now.diff(t, 'minute')
-  if (diffMin < 60) return `${diffMin} 分钟前`
-  const diffHr = now.diff(t, 'hour')
-  if (diffHr < 24) return `${diffHr} 小时前`
-  const diffDay = now.diff(t, 'day')
-  if (diffDay === 1) return '昨天'
-  if (diffDay < 7) return `${diffDay} 天前`
-  return t.format('YYYY-MM-DD HH:mm')
-}
-
 // ---------- mount ----------
 onMounted(() => {
   void load()
@@ -294,8 +318,15 @@ onMounted(() => {
   }
 }
 
-.mark-all-btn {
+.notify-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
   flex-shrink: 0;
+}
+
+.toolbar-btn {
   height: var(--notify-bar-h) !important;
   min-height: var(--notify-bar-h) !important;
   padding: 0 var(--space-4) !important;
@@ -318,6 +349,17 @@ onMounted(() => {
 
   &:disabled {
     opacity: 0.45;
+  }
+
+  &--danger:not(:disabled) {
+    color: var(--color-danger) !important;
+    border-color: color-mix(in srgb, var(--color-danger) 35%, var(--border-color)) !important;
+
+    &:hover {
+      color: var(--color-danger) !important;
+      background: color-mix(in srgb, var(--color-danger) 8%, var(--bg-card)) !important;
+      border-color: var(--color-danger) !important;
+    }
   }
 }
 
@@ -355,20 +397,21 @@ onMounted(() => {
   &:hover { background: var(--bg-soft); }
 
   &.unread {
-    background: var(--color-primary-lighter);
-
-    &::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
-      background: var(--color-primary);
-    }
+    background: var(--bg-soft);
   }
 
-  &.unread:hover { background: var(--color-primary-light); }
+  &.unread:hover {
+    background: color-mix(in srgb, var(--bg-soft) 65%, var(--bg-overlay));
+  }
+
+  &.urgent.unread {
+    background: color-mix(in srgb, var(--color-warning) 10%, var(--bg-card));
+  }
+
+  &.urgent.unread:hover {
+    background: color-mix(in srgb, var(--color-warning) 14%, var(--bg-card));
+  }
+
   &.urgent .row-title { color: var(--color-danger); }
 }
 

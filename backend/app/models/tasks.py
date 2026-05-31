@@ -62,6 +62,21 @@ class Task(db.Model):
     )
 
 
+class TaskNodeManager(db.Model):
+    """Grants subtree management on anchor task_id (node + all descendants)."""
+
+    __tablename__ = "task_node_managers"
+
+    group_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("groups.id"), primary_key=True)
+    task_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("tasks.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), primary_key=True)
+    granted_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (Index("idx_task_node_managers_user", "group_id", "user_id"),)
+
+
 class TaskClosure(db.Model):
     __tablename__ = "task_closure"
 

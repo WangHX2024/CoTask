@@ -28,7 +28,7 @@ class Status(MethodView):
 
 @blp.route("/<int:group_id>/tasks/<int:task_id>/assign")
 class Assign(MethodView):
-    @require_group_role("leader")
+    @require_group_role("member")
     @blp.arguments(AssignRequest)
     @blp.response(200, TaskDetail)
     def post(self, data, group_id, task_id):

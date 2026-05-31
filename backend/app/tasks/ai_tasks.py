@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import traceback
 
+from ..common.json_util import json_safe
 from ..common.tx import tx
 from ..extensions import celery, db
 from ..models import AiConversation
@@ -35,9 +36,9 @@ def run_ai_job(self, conversation_id: int):
         scope = conv.scope
         ctx = conv.context or {}
         if scope == "tree_gen":
-            result = run_tree_gen(conv, ctx.get("document", ""))
+            result = run_tree_gen(conv)
         elif scope == "tree_edit":
-            result = run_tree_edit(conv, ctx.get("current_tree", {}), ctx.get("instruction", ""))
+            result = run_tree_edit(conv)
         elif scope == "daily_advice":
             result = run_daily_advice(conv, ctx)
         elif scope == "assignment":
@@ -47,7 +48,11 @@ def run_ai_job(self, conversation_id: int):
 
         with tx():
             conv.status = "done"
-            conv.result = result
+            conv.result = json_safe(result)
+        if scope == "daily_advice":
+            from ..modules.dashboard.service import cache_daily_advice
+
+            cache_daily_advice(conv.user_id, result)
         push_user(conv.user_id, "ai.job_progress", {
             "job_id": conv.id, "status": "done", "result": result,
         })

@@ -19,7 +19,13 @@ def update_profile(uid: int, data: dict) -> User:
     user = get_user(uid)
     with tx():
         for k, v in data.items():
-            if hasattr(user, k) and v is not None:
+            if v is None:
+                continue
+            if k == "prefs" and isinstance(v, dict):
+                merged = dict(user.prefs or {})
+                merged.update(v)
+                user.prefs = merged
+            elif hasattr(user, k):
                 setattr(user, k, v)
     return user
 

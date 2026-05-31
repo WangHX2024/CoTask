@@ -30,7 +30,7 @@ class File(db.Model):
     uploader_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
     filename: Mapped[str] = mapped_column(String(256), nullable=False)
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    mime: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mime: Mapped[str | None] = mapped_column(String(128), nullable=True)
     md5: Mapped[str | None] = mapped_column(String(64), nullable=True)
     storage_key: Mapped[str] = mapped_column(String(256), nullable=False)
     visibility: Mapped[str] = mapped_column(

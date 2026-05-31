@@ -1,9 +1,9 @@
 <template>
   <div class="pt">
     <!-- Sticky toolbar -->
-    <header class="pt-toolbar">
-      <div class="tb-left">
-        <h1 class="pt-title">
+    <header class="ws-toolbar pt-toolbar">
+      <div class="ws-toolbar__left">
+        <h1 class="ws-toolbar__title">
           <span class="t-main">项目树</span>
           <template v-if="group">
             <span class="t-sep">/</span>
@@ -12,80 +12,58 @@
             <span class="t-name">{{ group.name }}</span>
           </template>
         </h1>
-        <div class="view-switcher">
-          <el-button-group>
-            <el-button type="primary" size="small">
-              <el-icon><Files /></el-icon>&nbsp;项目树
-            </el-button>
-            <el-button size="small" @click="router.push(`/groups/${gid}/timeline`)">
-              <el-icon><Calendar /></el-icon>&nbsp;时间轴
-            </el-button>
-          </el-button-group>
-        </div>
+        <span class="ws-toolbar__sep" aria-hidden="true" />
+        <TreeTimelineSwitcher mode="tree" :group-id="gid" />
       </div>
 
-      <div class="tb-right">
-        <!-- Filter switch -->
-        <el-switch
-          v-model="focusOnMine"
-          inline-prompt
-          active-text="仅我的"
-          inactive-text="全部"
-          style="--el-switch-on-color: var(--color-primary);"
-        />
+      <div class="ws-toolbar__right">
+        <button
+          type="button"
+          class="ws-chip"
+          :class="{ 'is-active': focusOnMine }"
+          :aria-pressed="focusOnMine"
+          @click="focusOnMine = !focusOnMine"
+        >
+          <el-icon><Filter /></el-icon>
+          仅我的
+        </button>
 
-        <!-- Leader: Create & AI actions -->
         <template v-if="isLeader">
-          <div class="tb-divider" />
-          <el-button type="primary" size="small" @click="onAddRoot">
-            <el-icon><Plus /></el-icon>&nbsp;新建节点
-          </el-button>
-          <el-button size="small" @click="onAiGenerate">
-            <el-icon><MagicStick /></el-icon>&nbsp;AI 生成
-          </el-button>
-          <el-button size="small" @click="onAiEdit">
-            <el-icon><ChatLineRound /></el-icon>&nbsp;AI 对话
-          </el-button>
-          <el-button size="small" @click="goInspiration">
-            <el-icon><Promotion /></el-icon>&nbsp;导入模板
+          <span class="ws-toolbar__sep" aria-hidden="true" />
+          <el-button type="primary" round class="pt-btn-create" @click="onAddRoot">
+            <el-icon><Plus /></el-icon>
+            新建节点
           </el-button>
         </template>
 
-        <!-- Export & info -->
-        <div class="tb-divider" />
-        <el-dropdown @command="onExport">
-          <el-button size="small">
-            <el-icon><Download /></el-icon>&nbsp;导出
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="json">JSON 格式</el-dropdown-item>
-              <el-dropdown-item command="md">Markdown 格式</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <span class="ws-toolbar__sep" aria-hidden="true" />
 
-        <el-tooltip :content="`版本 ${treeStore.version} · ${members.length} 位成员`">
-          <span class="info-pill">
-            <el-icon><User /></el-icon>
-            <span>{{ members.length }}</span>
-            <span class="pill-sep">·</span>
-            <span>v{{ treeStore.version }}</span>
-          </span>
-        </el-tooltip>
-
-        <!-- AI panel toggle -->
-        <el-tooltip v-if="aiCollapsed" content="展开 AI 助手">
-          <el-button size="small" text circle @click="aiCollapsed = false">
-            <el-icon><MagicStick /></el-icon>
-          </el-button>
-        </el-tooltip>
+        <div class="ws-chip-group" role="group" aria-label="导入与导出">
+          <button
+            v-if="isLeader"
+            type="button"
+            class="ws-chip"
+            @click="goInspiration"
+          >
+            <el-icon><Promotion /></el-icon>
+            导入模板
+          </button>
+          <button type="button" class="ws-chip" @click="exportMd">
+            <el-icon><Download /></el-icon>
+            导出 Markdown
+          </button>
+        </div>
       </div>
     </header>
 
     <!-- Body -->
-    <div class="pt-body">
+    <div
+      class="pt-body"
+      :class="{
+        'pt-body--ai-open': showAiPanel,
+        'pt-body--ai-collapsed': showAiRail,
+      }"
+    >
       <section class="pt-tree-col">
         <el-skeleton v-if="treeStore.loading && !treeStore.nodes.length" :rows="6" animated />
         <TreeCanvas
@@ -93,7 +71,6 @@
           :nodes="treeStore.nodes"
           :focus-on-mine="focusOnMine"
           :current-user-id="auth.user?.id || 0"
-          :current-role="groupsStore.currentRole"
           :selected-id="treeStore.selectedId"
           :members="members"
           @select="onSelectNode"
@@ -103,14 +80,35 @@
         />
       </section>
 
-      <aside class="pt-ai-col" v-if="!aiCollapsed">
-        <AiChatPanel
-          :group-id="gid"
-          :collapsible="true"
-          @collapse="aiCollapsed = true"
-          @preview="onAiPreview"
-          @apply="onAiApply"
-        />
+      <aside v-if="isLeader" class="pt-ai-col" :class="{ 'pt-ai-col--collapsed': aiCollapsed }">
+        <div v-if="aiCollapsed" class="pt-ai-rail">
+          <button
+            type="button"
+            class="pt-ai-rail-btn"
+            title="展开 AI 助手"
+            aria-label="展开 AI 助手"
+            @click="aiCollapsed = false"
+          >
+            <el-icon><MagicStick /></el-icon>
+            <span class="pt-ai-rail-label">AI</span>
+          </button>
+        </div>
+        <div v-else class="pt-ai-panel">
+          <button
+            type="button"
+            class="pt-ai-collapse-btn"
+            title="收起 AI 助手"
+            aria-label="收起 AI 助手"
+            @click="aiCollapsed = true"
+          >
+            <el-icon><DArrowRight /></el-icon>
+          </button>
+          <AiChatPanel
+            :group-id="gid"
+            @preview="onAiPreview"
+            @apply="onAiApply"
+          />
+        </div>
       </aside>
     </div>
 
@@ -119,8 +117,9 @@
       v-model:visible="drawerOpen"
       :node="treeStore.selected"
       :members="members"
-      :current-role="groupsStore.currentRole"
+      :group="group"
       @select="onSelectNode"
+      @add-child="onAddChild"
     />
 
     <!-- Add node dialog -->
@@ -141,11 +140,7 @@
             placeholder="可选"
           />
         </el-form-item>
-        <el-form-item label="叶子任务">
-          <el-switch v-model="addDialog.isLeaf" />
-          <span class="tiny muted" style="margin-left: 8px">叶子任务可设置 DDL 与负责人</span>
-        </el-form-item>
-        <el-form-item v-if="addDialog.isLeaf" label="日期">
+        <el-form-item label="日期">
           <el-date-picker
             v-model="addDialog.dateRange"
             type="daterange"
@@ -178,6 +173,7 @@
       <DiffViewer
         :old-nodes="treeStore.nodes"
         :new-nodes="diffDialog.newNodes"
+        :members="members"
       />
       <div v-if="diffDialog.summary" class="diff-summary muted">
         {{ diffDialog.summary }}
@@ -200,10 +196,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Plus, MagicStick, ChatLineRound, Files, ArrowDown, User,
-  Calendar, Promotion, Download,
-} from '@element-plus/icons-vue'
+import { Plus, Promotion, Download, Filter, MagicStick, DArrowRight } from '@element-plus/icons-vue'
 import { Api, type MemberInfo } from '@/api'
 import { useTreeStore } from '@/stores/tree'
 import { useGroupsStore } from '@/stores/groups'
@@ -213,6 +206,7 @@ import TreeCanvas from '@/components/tree/TreeCanvas.vue'
 import TaskDrawer from '@/components/tree/TaskDrawer.vue'
 import AiChatPanel from '@/components/ai/AiChatPanel.vue'
 import DiffViewer from '@/components/tree/DiffViewer.vue'
+import TreeTimelineSwitcher from '@/components/common/TreeTimelineSwitcher.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -225,6 +219,19 @@ const gid = computed(() => Number(route.params.gid))
 const group = computed(() => groupsStore.list.find((g) => g.id === gid.value) || null)
 const isLeader = computed(() => groupsStore.currentRole === 'leader')
 
+/** Leaders: AI expanded by default; members: no AI column (full-width tree). */
+const aiCollapsed = ref(false)
+const showAiPanel = computed(() => isLeader.value && !aiCollapsed.value)
+const showAiRail = computed(() => isLeader.value && aiCollapsed.value)
+
+watch(
+  isLeader,
+  (leader) => {
+    aiCollapsed.value = !leader
+  },
+  { immediate: true },
+)
+
 const focusOnMine = computed({
   get: () => treeStore.focusOnMine,
   set: (v: boolean) => { treeStore.focusOnMine = v },
@@ -232,8 +239,6 @@ const focusOnMine = computed({
 
 const members = ref<MemberInfo[]>([])
 const drawerOpen = ref(false)
-const aiCollapsed = ref(false)
-
 // open drawer when selectedId becomes non-zero
 watch(
   () => treeStore.selectedId,
@@ -314,7 +319,6 @@ const addDialog = reactive({
   parentId: null as number | null,
   title: '',
   description: '',
-  isLeaf: true,
   dateRange: null as [string, string] | null,
   busy: false,
 })
@@ -324,7 +328,6 @@ function openAdd(parentId: number | null) {
   addDialog.parentId = parentId
   addDialog.title = ''
   addDialog.description = ''
-  addDialog.isLeaf = parentId !== null // root is usually a composite
   addDialog.dateRange = null
 }
 function onAddRoot() { openAdd(null) }
@@ -337,7 +340,6 @@ async function onConfirmAdd() {
     await treeStore.createChild(addDialog.parentId, {
       title: addDialog.title.trim(),
       description: addDialog.description,
-      is_leaf: addDialog.isLeaf,
       start_date: addDialog.dateRange?.[0] || null,
       end_date: addDialog.dateRange?.[1] || null,
     })
@@ -377,15 +379,6 @@ async function onDrop(p: { id: number; newParentId: number | null; position: num
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '移动失败')
   }
-}
-
-// AI flows
-function onAiGenerate() {
-  aiCollapsed.value = false
-  // active tab=gen handled by AiChatPanel default
-}
-function onAiEdit() {
-  aiCollapsed.value = false
 }
 
 const diffDialog = reactive({
@@ -434,12 +427,6 @@ function goInspiration() {
   router.push('/inspiration')
 }
 
-// export
-function onExport(cmd: string) {
-  if (cmd === 'json') exportJson()
-  else if (cmd === 'md') exportMd()
-}
-
 function downloadBlob(name: string, mime: string, content: string) {
   const blob = new Blob([content], { type: mime })
   const url = URL.createObjectURL(blob)
@@ -448,16 +435,6 @@ function downloadBlob(name: string, mime: string, content: string) {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
-function exportJson() {
-  const payload = {
-    group_id: treeStore.groupId,
-    version: treeStore.version,
-    nodes: treeStore.nodes,
-  }
-  const fname = `project-tree-g${treeStore.groupId}-v${treeStore.version}.json`
-  downloadBlob(fname, 'application/json', JSON.stringify(payload, null, 2))
 }
 
 function exportMd() {
@@ -498,95 +475,33 @@ function exportMd() {
   overflow: hidden;
 }
 
-/* ---------- Toolbar ---------- */
-.pt-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
-  height: 56px;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.tb-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.tb-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.tb-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--border-subtle);
-  flex-shrink: 0;
-  margin: 0 var(--space-1);
-}
-
-.pt-title {
-  margin: 0;
-  font-size: var(--fs-base);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-  overflow: hidden;
-
-  .t-main   { color: var(--text-primary); }
-  .t-sep    { color: var(--text-tertiary); font-weight: 400; font-size: var(--fs-sm); }
-  .t-course { color: var(--color-primary); overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
-  .t-name   { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
-}
-
-.view-switcher { flex-shrink: 0; }
-
-.info-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-  padding: 3px var(--space-3);
-  background: var(--bg-soft);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  white-space: nowrap;
-
-  .pill-sep { opacity: 0.5; margin: 0 2px; }
-}
-
 /* ---------- Body ---------- */
 .pt-body {
+  /* Align AI panel top with first tree card (canvas 4px + row 2px). */
+  --pt-content-inset-top: 6px;
+
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr;
   gap: var(--space-6);
   padding: var(--space-6);
   min-height: 0;
   overflow: hidden;
+
+  &--ai-open {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+
+  &--ai-collapsed {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
 }
 
 .pt-tree-col {
   overflow-y: auto;
   padding-right: var(--space-1);
   min-height: 0;
+  min-width: 0;
 }
 
 .pt-ai-col {
@@ -594,6 +509,94 @@ function exportMd() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-top: var(--pt-content-inset-top);
+  box-sizing: border-box;
+
+  &--collapsed {
+    width: 44px;
+    min-width: 44px;
+  }
+}
+
+.pt-ai-rail {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--space-2);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.pt-ai-rail-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease;
+
+  .el-icon {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: var(--color-primary-light);
+  }
+}
+
+.pt-ai-rail-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.pt-ai-panel {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pt-ai-collapse-btn {
+  position: absolute;
+  top: var(--space-2);
+  left: calc(var(--space-2) * -1 - 28px);
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+
+  .el-icon {
+    font-size: 14px;
+  }
+
+  &:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
 }
 
 /* ---------- Diff summary ---------- */
@@ -609,15 +612,13 @@ function exportMd() {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {
-  .pt-body {
+  .pt-body,
+  .pt-body--ai-open,
+  .pt-body--ai-collapsed {
     grid-template-columns: 1fr;
     overflow: auto;
   }
   .pt-ai-col { display: none; }
 }
 
-@media (max-width: 768px) {
-  .pt-title .t-course,
-  .pt-title .t-name { display: none; }
-}
 </style>

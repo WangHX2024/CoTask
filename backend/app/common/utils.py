@@ -15,7 +15,7 @@ def gen_anon_id(length: int = 4) -> str:
     return "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
-def gen_sms_code(length: int = 6) -> str:
+def gen_sms_code(length: int = 4) -> str:
     return "".join(random.choice(string.digits) for _ in range(length))
 
 

@@ -6,5 +6,12 @@ from .files import File, Folder  # noqa: F401
 from .groups import Group, GroupMember  # noqa: F401
 from .inspiration import InspirationPost, PostComment, PostFavorite, PostLike  # noqa: F401
 from .notifications import Notification  # noqa: F401
-from .tasks import Task, TaskAssignment, TaskClosure, TaskDependency, TaskInspirationRef  # noqa: F401
+from .tasks import (  # noqa: F401
+    Task,
+    TaskAssignment,
+    TaskClosure,
+    TaskDependency,
+    TaskInspirationRef,
+    TaskNodeManager,
+)
 from .users import ContributionLog, User, UserSkill  # noqa: F401
